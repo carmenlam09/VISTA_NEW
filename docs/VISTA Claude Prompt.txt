@@ -1,0 +1,109 @@
+Based on this proposal, I want to create a web app. Help me to create a complete and detailed system prompt for Claude code to develop this app. 
+
+Can start with Module 1 : Digital Intake & Entity Extraction first. The Digital Intake & Entity Extraction Engine uses Al-powered document understanding to automatically identify vendors, directors, shareholders, UBOs, and related parties from SSM reports, Supplier Registration Forms, and vendor confirmation letters. Structured data is extracted and digitised at source, creating a unified vendor profile for downstream screening and due diligence activities. Need to create a database to store this data. 
+
+For Report SSM,
+    1. Corporate Information
+        a. Company Name
+        b. Former Company Name
+        c. Date of change company name
+        d. Date of incorporate
+        e. Company Status
+        f. Natured of Business
+    2. Summary of Share Capital
+        a.Paid Up Capital (Total Shared)
+    3. Directors/ Officers
+        a. Name
+        b. IC/ Passport
+        c. Designation
+    4. Shareholders/ Members
+        a. IC/ Passport/ Registration No.
+        b. Name
+        c.Total Share
+
+Create the tables and columns based on these details. These are the information that need to be extracted from the SSM report and saved in the database. 
+
+
+When creating this module, start with a frontend UI first. For module 2, develop based on module 1. 
+
+Module 2 : Unified Screening Intelligence View
+The Screening Intelligence Hub brings together screening information from CTOs, NetReveal previous KYV reviews, adverse news sources, and public records into a single intelligence view. Automated data aggregation and Al-generated summaries eliminate the need for reviewers to navigate multiple systems to build a complete
+vendor risk picture.
+
+CTOS :
+    (CTOS Enquiry for Company)
+    1. Financial Highlights
+        a. Total Issued (Ordinary)
+        b. Total Issued (Preference)
+        c. Total Issued (Others)
+        d. Revenue/ Turnover
+        e. Net Income
+        f. Current Assets
+        g. Current Liabilities
+        h. Current Ratio
+        i. Debt-to-equity Ratio
+
+    (CTOS Enquiry for Company, Directories and Shareholders)
+    1. Section D1: LEGAL CASES (SUBJECT AS DEFENDANT) 
+        a. Plaintiff
+        b. Defendant
+        c. Case No.
+        d. Remark
+    2. Section D2: LEGAL CASES (SUBJECT AS PLAINTIFF)
+        a. Plaintiff
+        b. Defendant
+        c. Case No.
+        d. Remark
+    3. Section E2: TRADE REFERENCE
+        a. Referee
+        b. Account No.
+        c. Capacity
+        d. Statement Date
+        3. Default Amount (RM)        
+
+Netreveal:
+For searched information found in Netreveal, add these details below into the database :
+1. DOB/DOI
+2. Nationality
+3. Check Name
+4. UID
+5. Watchperson Details/ FPFA Watch Person Details   
+
+These are the information that need to be saved in the database. 
+
+The same goes to other modules. Like Module 3 is built based on the existing Module 1 and 2.
+
+Module 3. Adverse Media Screening Engine
+The Adverse Media Screening Engine leverages AI to analyse adverse news and public intelligence sources using approved keyword libraries and risk taxonomies. Findings are automatically categorised into relevant risk themes such as financial crime, sanctions, fraud, regulatory breaches, tax offences, ESG concerns, and operational risks. Use google SERP API to search for relevant articles based on the keywords entered by user. Include AI generated summary for the articles extracted. 
+
+1. Searched person/company
+2. Article title
+3. Article link
+4. Brief summary
+
+All these info are saved in database too. 
+Brief summary to be used when generating the KYV report. 
+
+
+Apply this to other Modules 4,5,6,7.
+
+
+Module 4. False Positive & True Hit Triage
+The Risk Signal Intelligence Engine uses Al-driven entity resolution, contextual reasoning, and pattern analysis to distinguish genuine risks from false positives. By evaluating attributes such as name variations, nationality, ownership structures, corporate relationships, and historical screening outcomes, it generates confidence scores and prioritises findings that warrant human review. This enables reviewers to focus on risk judgement and decision-making rather than manual verification.
+
+
+Module 5. GEN AI Smart KYV Report Generation
+The Smart Report Generation Engine transforms screening findings, risk assessments, and supporting evidence into approval-ready KYV reports aligned to existing templates. As we don't have existing templates currently, generate a report template that acts as placeholder and can be changed when we have a new template. Generative Al automatically drafts risk narratives and justifications, significantly reducing report preparation effort while improving consistency and audit readiness.
+
+Module 7. Vendor Risk Knowledge Repository
+The Vendor Risk Knowledge Repository serves as the Bank's growing source of institutional intelligence by capturing historical KYV reviews, adverse news assessments, false-positive decisions, and approval records. Al-assisted knowledge retrieval enables future reviews to leverage past assessments instead of repeating the same investigations. Create a page that allows user to retrieve the information from the Knowledge Repository.
+
+Make sure the final result will be a functional web app that combines all the modules. We can click each tab for different modules all in one web app interface. Make sure front end and back end are linked within all the modules. 
+
+Use react framework to create this web app. 
+Suggest the best database to use.
+
+
+
+
+

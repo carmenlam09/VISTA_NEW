@@ -1,0 +1,1 @@
+Groq API key has been moved to packages/backend/.env (GROQ_API_KEY). Do not commit real API keys in plaintext files under docs/.

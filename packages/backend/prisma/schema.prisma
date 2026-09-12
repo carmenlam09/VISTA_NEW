@@ -1,0 +1,403 @@
+// VISTA Prisma schema.
+// Module 1 tables (CLAUDE.md Section 5.2): vendors, documents, and the four
+// SSM extraction tables. Modules 2-7 add their own vendor_id-anchored tables
+// later (Section 7) without touching this schema.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  email     String   @unique
+  role      String   @default("reviewer")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  createdVendors    Vendor[]
+  uploadedDocuments Document[]
+
+  // Module 3 (Adverse Media)
+  searchedAdverseMediaSearches AdverseMediaSearch[]
+  reviewedAdverseMediaArticles AdverseMediaArticle[]
+
+  // Module 4 (Triage)
+  reviewedRiskTriageResults RiskTriageResult[]
+
+  @@map("users")
+}
+
+// Core vendor record, the anchor entity all modules attach to.
+model Vendor {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyName    String   @map("company_name") @db.VarChar(255)
+  registrationNo String?  @map("registration_no") @db.VarChar(100)
+  status         String   @default("draft") @db.VarChar(50) // draft | in_review | approved | rejected
+  createdById    String?  @map("created_by") @db.Uuid
+  createdBy      User?    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  documents     Document[]
+  corporateInfo SsmCorporateInfo?
+  shareCapital  SsmShareCapital?
+  directors     SsmDirector[]
+  shareholders  SsmShareholder[]
+
+  // Module 2 (Screening Intelligence)
+  ctosEnquiries      CtosEnquiry[]
+  netrevealRecords   NetrevealRecord[]
+  screeningSummaries ScreeningSummary[]
+
+  // Module 3 (Adverse Media)
+  adverseMediaSearches AdverseMediaSearch[]
+  adverseMediaArticles AdverseMediaArticle[]
+
+  // Module 4 (Triage)
+  riskTriageResults RiskTriageResult[]
+
+  @@map("vendors")
+}
+
+// Uploaded source documents (SSM report, Supplier Reg Form, Vendor Confirmation Letter).
+model Document {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId          String   @map("vendor_id") @db.Uuid
+  vendor            Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  docType           String   @map("doc_type") @db.VarChar(50) // 'ssm_report' | 'supplier_registration_form' | 'vendor_confirmation_letter'
+  fileName          String   @map("file_name") @db.VarChar(255)
+  filePath          String   @map("file_path") @db.Text
+  uploadStatus      String   @default("uploaded") @map("upload_status") @db.VarChar(50) // uploaded | extracting | extracted | failed
+  rawExtractionJson Json?    @map("raw_extraction_json") @db.JsonB
+  uploadedById      String?  @map("uploaded_by") @db.Uuid
+  uploadedBy        User?    @relation(fields: [uploadedById], references: [id])
+  uploadedAt        DateTime @default(now()) @map("uploaded_at")
+
+  corporateInfo SsmCorporateInfo[]
+  shareCapital  SsmShareCapital[]
+  directors     SsmDirector[]
+  shareholders  SsmShareholder[]
+
+  // Module 2 (Screening Intelligence)
+  ctosEnquiries    CtosEnquiry[]
+  netrevealRecords NetrevealRecord[]
+
+  @@index([vendorId], map: "idx_documents_vendor")
+  @@map("documents")
+}
+
+// SSM: 1. Corporate Information (one row per vendor).
+model SsmCorporateInfo {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId            String    @unique @map("vendor_id") @db.Uuid
+  vendor              Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  documentId          String?   @map("document_id") @db.Uuid
+  document            Document? @relation(fields: [documentId], references: [id])
+  companyName         String?   @map("company_name") @db.VarChar(255)
+  formerCompanyName   String?   @map("former_company_name") @db.VarChar(255)
+  dateOfNameChange    DateTime? @map("date_of_name_change") @db.Date
+  dateOfIncorporation DateTime? @map("date_of_incorporation") @db.Date
+  companyStatus       String?   @map("company_status") @db.VarChar(100) // e.g. Active, Dormant, Struck Off
+  natureOfBusiness    String?   @map("nature_of_business") @db.Text
+  isVerified          Boolean   @default(false) @map("is_verified")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("ssm_corporate_info")
+}
+
+// SSM: 2. Summary of Share Capital (one row per vendor).
+model SsmShareCapital {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId      String    @unique @map("vendor_id") @db.Uuid
+  vendor        Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  documentId    String?   @map("document_id") @db.Uuid
+  document      Document? @relation(fields: [documentId], references: [id])
+  paidUpCapital Decimal?  @map("paid_up_capital") @db.Decimal(18, 2) // "Paid Up Capital (Total Shared)"
+  isVerified    Boolean   @default(false) @map("is_verified")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("ssm_share_capital")
+}
+
+// SSM: 3. Directors / Officers (many per vendor).
+model SsmDirector {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId     String    @map("vendor_id") @db.Uuid
+  vendor       Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  documentId   String?   @map("document_id") @db.Uuid
+  document     Document? @relation(fields: [documentId], references: [id])
+  name         String    @db.VarChar(255)
+  icPassportNo String?   @map("ic_passport_no") @db.VarChar(100)
+  designation  String?   @db.VarChar(150) // e.g. Director, Company Secretary
+  isVerified   Boolean   @default(false) @map("is_verified")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Module 2 (Screening Intelligence) - enquiries run against this director
+  ctosEnquiries    CtosEnquiry[]
+  netrevealRecords NetrevealRecord[]
+
+  // Module 3 (Adverse Media) - searches run against this director
+  adverseMediaSearches AdverseMediaSearch[]
+
+  @@index([vendorId], map: "idx_directors_vendor")
+  @@map("ssm_directors")
+}
+
+// SSM: 4. Shareholders / Members (many per vendor).
+model SsmShareholder {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId                 String    @map("vendor_id") @db.Uuid
+  vendor                   Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  documentId               String?   @map("document_id") @db.Uuid
+  document                 Document? @relation(fields: [documentId], references: [id])
+  icPassportRegistrationNo String?   @map("ic_passport_registration_no") @db.VarChar(100)
+  name                     String    @db.VarChar(255)
+  totalShares              Decimal?  @map("total_shares") @db.Decimal(18, 2)
+  isVerified               Boolean   @default(false) @map("is_verified")
+  createdAt                DateTime  @default(now()) @map("created_at")
+
+  // Module 2 (Screening Intelligence) - enquiries run against this shareholder
+  ctosEnquiries    CtosEnquiry[]
+  netrevealRecords NetrevealRecord[]
+
+  // Module 3 (Adverse Media) - searches run against this shareholder
+  adverseMediaSearches AdverseMediaSearch[]
+
+  @@index([vendorId], map: "idx_shareholders_vendor")
+  @@map("ssm_shareholders")
+}
+
+// ---------------------------------------------------------------------------
+// Module 2 - Screening Intelligence (VISTA_module2_system_prompt.md Section 2)
+// ---------------------------------------------------------------------------
+
+// One row per CTOS enquiry uploaded - a company enquiry, or a director/shareholder enquiry.
+model CtosEnquiry {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId    String @map("vendor_id") @db.Uuid
+  vendor      Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  subjectType String @map("subject_type") @db.VarChar(20) // 'company' | 'director' | 'shareholder'
+  subjectName String @map("subject_name") @db.VarChar(255) // denormalized for display even if the linked row is later deleted
+
+  relatedDirectorId    String?         @map("related_director_id") @db.Uuid
+  relatedDirector      SsmDirector?    @relation(fields: [relatedDirectorId], references: [id])
+  relatedShareholderId String?         @map("related_shareholder_id") @db.Uuid
+  relatedShareholder   SsmShareholder? @relation(fields: [relatedShareholderId], references: [id])
+
+  documentId  String    @map("document_id") @db.Uuid
+  document    Document  @relation(fields: [documentId], references: [id])
+  enquiryDate DateTime? @map("enquiry_date") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  financialHighlights CtosFinancialHighlights?
+  legalCases          CtosLegalCase[]
+  tradeReferences     CtosTradeReference[]
+
+  @@index([vendorId], map: "idx_ctos_enquiries_vendor")
+  @@map("ctos_enquiries")
+}
+
+// CTOS Financial Highlights - only applies where subject_type = 'company', one per enquiry.
+model CtosFinancialHighlights {
+  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ctosEnquiryId         String      @unique @map("ctos_enquiry_id") @db.Uuid
+  ctosEnquiry           CtosEnquiry @relation(fields: [ctosEnquiryId], references: [id], onDelete: Cascade)
+  totalIssuedOrdinary   Decimal?    @map("total_issued_ordinary") @db.Decimal(18, 2)
+  totalIssuedPreference Decimal?    @map("total_issued_preference") @db.Decimal(18, 2)
+  totalIssuedOthers     Decimal?    @map("total_issued_others") @db.Decimal(18, 2)
+  revenueTurnover       Decimal?    @map("revenue_turnover") @db.Decimal(18, 2)
+  netIncome             Decimal?    @map("net_income") @db.Decimal(18, 2)
+  currentAssets         Decimal?    @map("current_assets") @db.Decimal(18, 2)
+  currentLiabilities    Decimal?    @map("current_liabilities") @db.Decimal(18, 2)
+  currentRatio          Decimal?    @map("current_ratio") @db.Decimal(10, 4)
+  debtToEquityRatio     Decimal?    @map("debt_to_equity_ratio") @db.Decimal(10, 4)
+  isVerified            Boolean     @default(false) @map("is_verified")
+  updatedAt             DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  @@map("ctos_financial_highlights")
+}
+
+// CTOS Legal Cases - Section D1 (subject as Defendant) and D2 (subject as Plaintiff), many per enquiry.
+model CtosLegalCase {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ctosEnquiryId String      @map("ctos_enquiry_id") @db.Uuid
+  ctosEnquiry   CtosEnquiry @relation(fields: [ctosEnquiryId], references: [id], onDelete: Cascade)
+  caseType      String      @map("case_type") @db.VarChar(20) // 'defendant' (D1) | 'plaintiff' (D2)
+  plaintiff     String?     @db.VarChar(255)
+  defendant     String?     @db.VarChar(255)
+  caseNo        String?     @map("case_no") @db.VarChar(100)
+  remark        String?     @db.Text
+  isVerified    Boolean     @default(false) @map("is_verified")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  riskDecision  String      @default("pending") @map("risk_decision") @db.VarChar(20) // 'pending' | 'relevant' | 'false_positive' (Module 4 Triage)
+
+  @@index([ctosEnquiryId], map: "idx_ctos_legal_cases_enquiry")
+  @@map("ctos_legal_cases")
+}
+
+// CTOS Trade Reference - Section E2, many per enquiry.
+model CtosTradeReference {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ctosEnquiryId String      @map("ctos_enquiry_id") @db.Uuid
+  ctosEnquiry   CtosEnquiry @relation(fields: [ctosEnquiryId], references: [id], onDelete: Cascade)
+  referee       String?     @db.VarChar(255)
+  accountNo     String?     @map("account_no") @db.VarChar(100)
+  capacity      String?     @db.VarChar(150)
+  statementDate DateTime?   @map("statement_date") @db.Date
+  defaultAmount Decimal?    @map("default_amount") @db.Decimal(18, 2) // "Default Amount (RM)"
+  isVerified    Boolean     @default(false) @map("is_verified")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@index([ctosEnquiryId], map: "idx_ctos_trade_refs_enquiry")
+  @@map("ctos_trade_references")
+}
+
+// NetReveal search results - one row per subject searched (company, director, or shareholder).
+model NetrevealRecord {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId    String @map("vendor_id") @db.Uuid
+  vendor      Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  subjectType String @map("subject_type") @db.VarChar(20) // 'company' | 'director' | 'shareholder'
+  subjectName String @map("subject_name") @db.VarChar(255)
+
+  relatedDirectorId    String?         @map("related_director_id") @db.Uuid
+  relatedDirector      SsmDirector?    @relation(fields: [relatedDirectorId], references: [id])
+  relatedShareholderId String?         @map("related_shareholder_id") @db.Uuid
+  relatedShareholder   SsmShareholder? @relation(fields: [relatedShareholderId], references: [id])
+
+  documentId         String    @map("document_id") @db.Uuid
+  document           Document  @relation(fields: [documentId], references: [id])
+  dobDoi             DateTime? @map("dob_doi") @db.Date // Date of Birth / Date of Incorporation
+  nationality        String?   @db.VarChar(100)
+  checkName          String?   @map("check_name") @db.VarChar(255) // name variant the search was run against
+  uid                String?   @db.VarChar(100)
+  watchpersonDetails String?   @map("watchperson_details") @db.Text // Watchperson Details / FPFA Watch Person Details
+  isVerified         Boolean   @default(false) @map("is_verified")
+  searchedAt         DateTime  @default(now()) @map("searched_at")
+  riskDecision       String    @default("pending") @map("risk_decision") @db.VarChar(20) // 'pending' | 'relevant' | 'false_positive' (Module 4 Triage)
+
+  @@index([vendorId], map: "idx_netreveal_vendor")
+  @@map("netreveal_records")
+}
+
+// AI-generated aggregate summary shown at the top of the Screening Intelligence
+// dashboard. Every generation is kept (never overwritten) for audit history and
+// reuse by Module 5's report generation.
+model ScreeningSummary {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId         String   @map("vendor_id") @db.Uuid
+  vendor           Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  summaryText      String   @map("summary_text") @db.Text
+  generatedAt      DateTime @default(now()) @map("generated_at")
+  generatedByModel String?  @map("generated_by_model") @db.VarChar(100)
+
+  @@map("screening_summaries")
+}
+
+// ---------------------------------------------------------------------------
+// Module 3 - Adverse Media Screening Engine (VISTA_module3_system_prompt.md Section 2)
+// ---------------------------------------------------------------------------
+
+// Approved keyword library, tagged by risk theme, maintained by compliance/admin
+// users. Used to auto-suggest search terms and to help the AI categorize
+// results consistently.
+model AdverseMediaKeywordLibrary {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  keyword   String   @db.VarChar(255)
+  riskTheme String   @map("risk_theme") @db.VarChar(50) // financial_crime | sanctions | fraud | regulatory_breach | tax_offence | esg | operational_risk | other
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("adverse_media_keyword_library")
+}
+
+// One row per search run (a subject + the keywords used at that point in time).
+model AdverseMediaSearch {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId    String @map("vendor_id") @db.Uuid
+  vendor      Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  subjectType String @map("subject_type") @db.VarChar(20) // 'company' | 'director' | 'shareholder'
+  subjectName String @map("subject_name") @db.VarChar(255)
+
+  relatedDirectorId    String?         @map("related_director_id") @db.Uuid
+  relatedDirector      SsmDirector?    @relation(fields: [relatedDirectorId], references: [id])
+  relatedShareholderId String?         @map("related_shareholder_id") @db.Uuid
+  relatedShareholder   SsmShareholder? @relation(fields: [relatedShareholderId], references: [id])
+
+  keywordsUsed Json     @map("keywords_used") @db.JsonB // array of the actual query strings sent to SERP API
+  searchStatus String   @default("pending") @map("search_status") @db.VarChar(20) // pending | completed | failed
+  searchedById String?  @map("searched_by") @db.Uuid
+  searchedBy   User?    @relation(fields: [searchedById], references: [id])
+  searchedAt   DateTime @default(now()) @map("searched_at")
+
+  articles AdverseMediaArticle[]
+
+  @@index([vendorId], map: "idx_adverse_searches_vendor")
+  @@map("adverse_media_searches")
+}
+
+// One row per article found, with AI categorization + summary. No raw article
+// body is ever stored - only title, URL, and the AI's own paraphrased summary.
+model AdverseMediaArticle {
+  id       String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  searchId String             @map("search_id") @db.Uuid
+  search   AdverseMediaSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  vendorId String             @map("vendor_id") @db.Uuid
+  vendor   Vendor             @relation(fields: [vendorId], references: [id], onDelete: Cascade) // denormalized for fast vendor-level queries
+
+  articleTitle  String    @map("article_title") @db.Text
+  articleUrl    String    @map("article_url") @db.Text
+  sourceDomain  String?   @map("source_domain") @db.VarChar(255)
+  publishedDate DateTime? @map("published_date") @db.Date
+  riskTheme     String    @default("other") @map("risk_theme") @db.VarChar(50) // AI-assigned, from the same taxonomy as the keyword library
+  aiSummary     String    @map("ai_summary") @db.Text // paraphrased brief summary; feeds Module 5 KYV report
+
+  reviewerDecision String    @default("pending") @map("reviewer_decision") @db.VarChar(20) // 'pending' | 'relevant' | 'false_positive'
+  reviewedById     String?   @map("reviewed_by") @db.Uuid
+  reviewedBy       User?     @relation(fields: [reviewedById], references: [id])
+  reviewedAt       DateTime? @map("reviewed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([searchId], map: "idx_adverse_articles_search")
+  @@index([vendorId], map: "idx_adverse_articles_vendor")
+  @@index([riskTheme], map: "idx_adverse_articles_theme")
+  @@map("adverse_media_articles")
+}
+
+// ---------------------------------------------------------------------------
+// Module 4 - False Positive & True Hit Triage (VISTA_module4_system_prompt.md Section 2)
+// ---------------------------------------------------------------------------
+
+// One row per finding that's been through AI triage. Findings come from three
+// existing source tables; sourceType + sourceRecordId together identify which
+// one (polymorphic reference, no DB-level FK - enforced in application code).
+model RiskTriageResult {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId String @map("vendor_id") @db.Uuid
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  sourceType     String @map("source_type") @db.VarChar(30) // 'netreveal' | 'ctos_legal_case' | 'adverse_media'
+  sourceRecordId String @map("source_record_id") @db.Uuid // id in netreveal_records / ctos_legal_cases / adverse_media_articles
+  subjectType    String @map("subject_type") @db.VarChar(20) // 'company' | 'director' | 'shareholder'
+  subjectName    String @map("subject_name") @db.VarChar(255)
+
+  confidenceScore   Decimal @map("confidence_score") @db.Decimal(5, 2) // 0.00-100.00, likelihood this is a genuine risk
+  aiRationale       String  @map("ai_rationale") @db.Text
+  suggestedDecision String  @map("suggested_decision") @db.VarChar(20) // 'relevant' | 'false_positive' | 'needs_review'
+
+  reviewerFinalDecision String    @default("pending") @map("reviewer_final_decision") @db.VarChar(20) // 'pending' | 'relevant' | 'false_positive'
+  reviewedById          String?   @map("reviewed_by") @db.Uuid
+  reviewedBy            User?     @relation(fields: [reviewedById], references: [id])
+  reviewedAt            DateTime? @map("reviewed_at")
+  triagedAt             DateTime  @default(now()) @map("triaged_at")
+
+  @@index([vendorId], map: "idx_triage_vendor")
+  @@index([confidenceScore(sort: Desc)], map: "idx_triage_confidence")
+  @@index([sourceType, sourceRecordId], map: "idx_triage_source")
+  @@map("risk_triage_results")
+}
