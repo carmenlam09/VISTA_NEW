@@ -27,6 +27,7 @@
     "esbuild@0.28.2": true,
     "prisma@5.22.0": true,
     "@google/genai@2.22.0": true,
-    "protobufjs@7.6.6": true
+    "protobufjs@7.6.6": true,
+    "puppeteer@25.10.0": true
   }
 }

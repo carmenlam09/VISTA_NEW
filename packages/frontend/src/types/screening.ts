@@ -32,6 +32,8 @@ export interface CtosFinancialHighlights {
 
 export type LegalCaseType = "defendant" | "plaintiff";
 
+export type RiskDecision = "pending" | "relevant" | "false_positive";
+
 export interface CtosLegalCase {
   id: string;
   ctosEnquiryId: string;
@@ -42,6 +44,7 @@ export interface CtosLegalCase {
   remark: string | null;
   isVerified: boolean;
   createdAt: string;
+  riskDecision: RiskDecision;
   ctosEnquiry?: EnquirySubjectRef;
 }
 
@@ -96,6 +99,7 @@ export interface NetrevealRecord {
   watchpersonDetails: string | null;
   isVerified: boolean;
   searchedAt: string;
+  riskDecision: RiskDecision;
   document?: DocumentRef;
 }
 

@@ -2,7 +2,9 @@ import { MODULES } from "shared-types";
 import { Link, useParams } from "react-router-dom";
 
 import { AdverseMediaSummaryCard } from "@/components/adverseMedia/AdverseMediaSummaryCard";
+import { KyvReportSummaryCard } from "@/components/kyvReport/KyvReportSummaryCard";
 import { ScreeningSummaryCard } from "@/components/screening/ScreeningSummaryCard";
+import { TriageSummaryCard } from "@/components/triage/TriageSummaryCard";
 import { Badge } from "@/components/ui/badge";
 import { useVendor } from "@/hooks/useVendor";
 
@@ -33,12 +35,20 @@ export function VendorProfilePage() {
             Read-only summary of everything captured for this vendor so far.
           </p>
         </div>
-        <Link
-          to={`/vendor/${vendor.id}/intake`}
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          Open intake &amp; extraction
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            to={`/knowledge-repository?q=${encodeURIComponent(vendor.companyName)}`}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            View Similar Past Cases
+          </Link>
+          <Link
+            to={`/vendor/${vendor.id}/intake`}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Open intake &amp; extraction
+          </Link>
+        </div>
       </div>
 
       <section className="rounded-lg border border-border p-4">
@@ -140,6 +150,8 @@ export function VendorProfilePage() {
 
       <ScreeningSummaryCard vendorId={vendor.id} />
       <AdverseMediaSummaryCard vendorId={vendor.id} />
+      <TriageSummaryCard vendorId={vendor.id} />
+      <KyvReportSummaryCard vendorId={vendor.id} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         {futureModules.map((module) => (

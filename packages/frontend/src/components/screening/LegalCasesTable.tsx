@@ -12,6 +12,14 @@ import type { CtosLegalCase, LegalCaseType } from "@/types/screening";
 
 import { SubjectBadge } from "./SubjectBadge";
 
+// Set from the Triage queue (Module 4) - shown here too so a decision made
+// there is visible back in its original module.
+const RISK_DECISION_BADGE = {
+  pending: { variant: "warning" as const, label: "Triage: Pending" },
+  relevant: { variant: "destructive" as const, label: "Triage: Relevant" },
+  false_positive: { variant: "secondary" as const, label: "Triage: False Positive" },
+};
+
 type Filter = "all" | LegalCaseType;
 
 export function LegalCasesTable({
@@ -105,6 +113,9 @@ export function LegalCasesTable({
                       {item.caseType === "defendant" ? "D1 Defendant" : "D2 Plaintiff"}
                     </Badge>
                     {!item.isVerified && <Badge variant="warning">AI-extracted</Badge>}
+                    <Badge variant={RISK_DECISION_BADGE[item.riskDecision].variant}>
+                      {RISK_DECISION_BADGE[item.riskDecision].label}
+                    </Badge>
                   </div>
                   <div className="flex gap-1">
                     {hasEdit && (

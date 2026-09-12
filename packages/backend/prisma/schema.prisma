@@ -4,12 +4,14 @@
 // later (Section 7) without touching this schema.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
@@ -28,6 +30,10 @@ model User {
 
   // Module 4 (Triage)
   reviewedRiskTriageResults RiskTriageResult[]
+
+  // Module 5 (KYV Report) - Maker-Checker: one user prepares, another reviews.
+  preparedKyvReports KyvReport[] @relation("KyvReportPreparedBy")
+  reviewedKyvReports KyvReport[] @relation("KyvReportReviewedBy")
 
   @@map("users")
 }
@@ -60,6 +66,12 @@ model Vendor {
 
   // Module 4 (Triage)
   riskTriageResults RiskTriageResult[]
+
+  // Module 5 (KYV Report)
+  kyvReports KyvReport[]
+
+  // Module 6/7 (Knowledge Repository)
+  knowledgeRepositoryEntries KnowledgeRepositoryEntry[]
 
   @@map("vendors")
 }
@@ -400,4 +412,112 @@ model RiskTriageResult {
   @@index([confidenceScore(sort: Desc)], map: "idx_triage_confidence")
   @@index([sourceType, sourceRecordId], map: "idx_triage_source")
   @@map("risk_triage_results")
+}
+
+// ---------------------------------------------------------------------------
+// Module 5 - GEN AI Smart KYV Report Generation (VISTA_module5_system_prompt.md Section 2)
+// ---------------------------------------------------------------------------
+
+// The placeholder template structure - sections are data, not code, so a new
+// real template (once the bank finalizes one) can be added and activated
+// later without touching the report-generation logic.
+model ReportTemplate {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar(255)
+  version   String   @db.VarChar(50)
+  isActive  Boolean  @default(true) @map("is_active")
+  sections  Json     @db.JsonB // ordered array: [{ section_key, title, instructions }, ...]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  kyvReports KyvReport[]
+
+  @@map("report_templates")
+}
+
+// One row per generated report - a vendor can have several over time (redone,
+// re-approved, etc.); past reports stay visible for audit even after a newer
+// one is approved.
+model KyvReport {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId   String         @map("vendor_id") @db.Uuid
+  vendor     Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  templateId String         @map("template_id") @db.Uuid
+  template   ReportTemplate @relation(fields: [templateId], references: [id])
+
+  status String @default("draft") @db.VarChar(30) // 'draft' | 'pending_checker_review' | 'approved' | 'rejected'
+
+  preparedById     String?   @map("prepared_by") @db.Uuid
+  preparedBy       User?     @relation("KyvReportPreparedBy", fields: [preparedById], references: [id])
+  reviewedById     String?   @map("reviewed_by") @db.Uuid
+  reviewedBy       User?     @relation("KyvReportReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt       DateTime? @map("reviewed_at")
+  reviewerComments String?   @map("reviewer_comments") @db.Text // required when status = 'rejected'
+
+  generatedAt      DateTime @default(now()) @map("generated_at")
+  generatedByModel String?  @map("generated_by_model") @db.VarChar(100)
+
+  sections KyvReportSection[]
+
+  @@index([vendorId], map: "idx_kyv_reports_vendor")
+  @@map("kyv_reports")
+}
+
+// One row per section of a specific report, editable independently.
+model KyvReportSection {
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId String    @map("report_id") @db.Uuid
+  report   KyvReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  sectionKey   String  @map("section_key") @db.VarChar(100) // matches a section_key from the template
+  title        String  @db.VarChar(255)
+  content      String  @db.Text // AI-drafted, reviewer-editable
+  sectionOrder Int     @map("section_order")
+  isEdited     Boolean @default(false) @map("is_edited") // true once a reviewer changes the AI draft
+
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([reportId], map: "idx_kyv_sections_report")
+  @@map("kyv_report_sections")
+}
+
+// ---------------------------------------------------------------------------
+// Module 6/7 - Vendor Risk Knowledge Repository (VISTA_module6_system_prompt.md Section 2)
+// ---------------------------------------------------------------------------
+
+// One row per indexed item: either an approved KYV report, or a finalized
+// triage decision. Same polymorphic sourceType + sourceId pattern as Module
+// 4's RiskTriageResult - one table serves two source kinds rather than two
+// near-identical ones.
+//
+// Embedding dimension is 1536, not the spec's placeholder number by
+// coincidence: Groq has no embedding model at all (confirmed live against
+// its /models endpoint), so Gemini's gemini-embedding-001 is the only
+// embedding-capable provider available. Its native output is 3072-dim, which
+// exceeds pgvector's hard 2000-dimension cap on indexable vector columns
+// (ivfflat/hnsw) - see the pgvector README. 1536 is a supported
+// `outputDimensionality` truncation for this model, confirmed live, and the
+// truncated output is re-normalized to unit length before storage since
+// Matryoshka truncation isn't pre-normalized like the full-length output -
+// see services/knowledge/embeddings.ts.
+model KnowledgeRepositoryEntry {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vendorId String @map("vendor_id") @db.Uuid
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  sourceType String @map("source_type") @db.VarChar(30) // 'kyv_report' | 'triage_decision'
+  sourceId   String @map("source_id") @db.Uuid // kyv_reports.id or risk_triage_results.id (polymorphic, app-enforced)
+
+  subjectType String? @map("subject_type") @db.VarChar(20) // 'company' | 'director' | 'shareholder'
+  subjectName String? @map("subject_name") @db.VarChar(255)
+  riskTheme   String? @map("risk_theme") @db.VarChar(50)
+  decision    String? @db.VarChar(20) // 'approved' (kyv_report) | 'relevant' | 'false_positive' (triage_decision)
+
+  summaryText String                       @map("summary_text") @db.Text
+  embedding   Unsupported("vector(1536)")?
+
+  indexedAt DateTime @default(now()) @map("indexed_at")
+
+  @@index([vendorId], map: "idx_kre_vendor")
+  @@index([subjectName], map: "idx_kre_subject_name")
+  @@map("knowledge_repository_entries")
 }

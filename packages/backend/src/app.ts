@@ -7,7 +7,11 @@ import { ctosEnquiriesRouter } from "./routes/ctosEnquiries";
 import { documentsRouter } from "./routes/documents";
 import { filesRouter } from "./routes/files";
 import { keywordLibraryRouter } from "./routes/keywordLibrary";
+import { knowledgeRepositoryRouter } from "./routes/knowledgeRepository";
+import { kyvReportsRouter } from "./routes/kyvReports";
 import { netrevealRecordsRouter } from "./routes/netrevealRecords";
+import { reportTemplatesRouter } from "./routes/reportTemplates";
+import { riskTriageRouter } from "./routes/riskTriage";
 import { vendorsRouter } from "./routes/vendors";
 
 export function createApp() {
@@ -27,6 +31,10 @@ export function createApp() {
   app.use("/api/netreveal-records", netrevealRecordsRouter);
   app.use("/api/keyword-library", keywordLibraryRouter);
   app.use("/api/adverse-media-articles", adverseMediaArticlesRouter);
+  app.use("/api/risk-triage", riskTriageRouter);
+  app.use("/api/kyv-reports", kyvReportsRouter);
+  app.use("/api/report-templates", reportTemplatesRouter);
+  app.use("/api/knowledge-repository", knowledgeRepositoryRouter);
 
   app.use(errorHandler);
 

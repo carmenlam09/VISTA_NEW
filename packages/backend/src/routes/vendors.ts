@@ -11,10 +11,12 @@ import {
   type CategorizationResult,
   categorizeArticle,
 } from "../services/categorization/adverseMediaCategorizer";
+import { generateKyvReport } from "../services/kyvReport/reportGenerator";
 import { SummaryGenerationError, generateScreeningSummary } from "../services/screeningSummary";
 import { SerpSearchError, type SerpOrganicResult, searchGoogle } from "../services/search/serpClient";
 import { SUBJECT_TYPES, resolveSubject } from "../services/subjects";
 import { getCurrentUserId } from "../services/currentUser";
+import { SOURCE_TYPES, runTriageForVendor } from "../services/triage/triageEngine";
 
 export const vendorsRouter = Router();
 
@@ -743,5 +745,77 @@ vendorsRouter.get(
     });
 
     res.json(articles);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Module 4 - False Positive & True Hit Triage (VISTA_module4_system_prompt.md Section 3)
+// ---------------------------------------------------------------------------
+
+vendorsRouter.post(
+  "/:id/triage/run",
+  asyncHandler(async (req, res) => {
+    const vendor = await prisma.vendor.findUnique({ where: { id: req.params.id } });
+    if (!vendor) throw new NotFoundError("Vendor not found");
+
+    const summary = await runTriageForVendor(vendor.id);
+    res.json(summary);
+  })
+);
+
+const triageQuerySchema = z.object({
+  source_type: z.enum(SOURCE_TYPES).optional(),
+  reviewer_final_decision: z.enum(["pending", "relevant", "false_positive"]).optional(),
+});
+
+vendorsRouter.get(
+  "/:id/triage",
+  asyncHandler(async (req, res) => {
+    const vendor = await prisma.vendor.findUnique({ where: { id: req.params.id } });
+    if (!vendor) throw new NotFoundError("Vendor not found");
+
+    const query = triageQuerySchema.parse(req.query);
+
+    const results = await prisma.riskTriageResult.findMany({
+      where: {
+        vendorId: req.params.id,
+        sourceType: query.source_type,
+        reviewerFinalDecision: query.reviewer_final_decision,
+      },
+      orderBy: { confidenceScore: "desc" },
+    });
+
+    res.json(results);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Module 5 - GEN AI Smart KYV Report Generation (VISTA_module5_system_prompt.md Section 3)
+// ---------------------------------------------------------------------------
+
+vendorsRouter.post(
+  "/:id/kyv-reports",
+  asyncHandler(async (req, res) => {
+    const vendor = await prisma.vendor.findUnique({ where: { id: req.params.id } });
+    if (!vendor) throw new NotFoundError("Vendor not found");
+
+    const { report, warnings } = await generateKyvReport(vendor.id);
+    res.status(201).json({ ...report, warnings });
+  })
+);
+
+vendorsRouter.get(
+  "/:id/kyv-reports",
+  asyncHandler(async (req, res) => {
+    const vendor = await prisma.vendor.findUnique({ where: { id: req.params.id } });
+    if (!vendor) throw new NotFoundError("Vendor not found");
+
+    const reports = await prisma.kyvReport.findMany({
+      where: { vendorId: req.params.id },
+      orderBy: { generatedAt: "desc" },
+      include: { template: { select: { name: true, version: true } } },
+    });
+
+    res.json(reports);
   })
 );

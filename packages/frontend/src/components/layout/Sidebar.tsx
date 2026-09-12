@@ -19,11 +19,21 @@ export function Sidebar() {
       </Link>
 
       <div className="flex-1 space-y-1 px-2">
-        {MODULES.map((module) =>
-          vendorId ? (
+        {MODULES.map((module) => {
+          // Unlike every other module, the Knowledge Repository searches
+          // across all vendors - it's never vendor-scoped, so it's always
+          // reachable regardless of whether a vendor is currently selected.
+          const to =
+            module.slug === "knowledge-repository"
+              ? "/knowledge-repository"
+              : vendorId
+                ? `/vendor/${vendorId}/${module.slug}`
+                : null;
+
+          return to ? (
             <NavLink
               key={module.slug}
-              to={`/vendor/${vendorId}/${module.slug}`}
+              to={to}
               className={({ isActive }) =>
                 cn(
                   itemClasses,
@@ -49,8 +59,8 @@ export function Sidebar() {
                 M{module.moduleNumber}
               </span>
             </div>
-          )
-        )}
+          );
+        })}
       </div>
 
       <div className="border-t border-border px-4 py-3 text-xs text-muted-foreground">

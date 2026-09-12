@@ -23,6 +23,7 @@
     "express": "^4.21.1",
     "groq-sdk": "^1.6.0",
     "multer": "^2.3.0",
+    "puppeteer": "^25.10.0",
     "serpapi": "^2.2.1",
     "shared-types": "*",
     "zod": "^4.6.2"

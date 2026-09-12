@@ -54,6 +54,72 @@ async function main() {
     data: seedKeywords.map((k) => ({ keyword: k.keyword, riskTheme: k.riskTheme })),
   });
 
+  // Default placeholder report template (Module 5 Section 2) - the bank
+  // doesn't have a real KYV template yet, so this is what POST /kyv-reports
+  // uses until someone adds a real one and activates it. Upsert by
+  // name+version rather than delete+recreate: kyv_reports.template_id is
+  // ON DELETE RESTRICT, so deleting this row would fail once any report has
+  // ever been generated against it.
+  const kyvTemplateName = "Standard KYV Report (Placeholder)";
+  const kyvTemplateVersion = "v1";
+  const kyvTemplateSections = [
+    {
+      section_key: "executive_summary",
+      title: "Executive Summary",
+      instructions: "One paragraph overview of the vendor and the overall risk conclusion.",
+    },
+    {
+      section_key: "corporate_profile",
+      title: "Corporate Profile",
+      instructions: "Summarize Module 1 corporate info, directors, and shareholders.",
+    },
+    {
+      section_key: "financial_summary",
+      title: "Financial Summary",
+      instructions: "Summarize CTOS financial highlights and any notable ratios or trends.",
+    },
+    {
+      section_key: "legal_regulatory_findings",
+      title: "Legal & Regulatory Findings",
+      instructions:
+        "Summarize confirmed-relevant CTOS legal cases and any NetReveal watchlist hits.",
+    },
+    {
+      section_key: "adverse_media_findings",
+      title: "Adverse Media Findings",
+      instructions: "Summarize confirmed-relevant adverse media articles, grouped by risk theme.",
+    },
+    {
+      section_key: "risk_assessment_recommendation",
+      title: "Risk Assessment & Recommendation",
+      instructions:
+        "Overall risk narrative and a recommendation (approve / approve with conditions / escalate / decline), justified by the findings above.",
+    },
+  ];
+
+  const existingKyvTemplate = await prisma.reportTemplate.findFirst({
+    where: { name: kyvTemplateName, version: kyvTemplateVersion },
+  });
+  const kyvTemplate = existingKyvTemplate
+    ? await prisma.reportTemplate.update({
+        where: { id: existingKyvTemplate.id },
+        data: { sections: kyvTemplateSections, isActive: true },
+      })
+    : await prisma.reportTemplate.create({
+        data: {
+          name: kyvTemplateName,
+          version: kyvTemplateVersion,
+          isActive: true,
+          sections: kyvTemplateSections,
+        },
+      });
+  // Exactly one active template after seeding, even if an earlier run left
+  // some other template (e.g. a real one added via the admin API) active.
+  await prisma.reportTemplate.updateMany({
+    where: { id: { not: kyvTemplate.id } },
+    data: { isActive: false },
+  });
+
   // Reset seed vendors on every run so `npm run db:seed` stays repeatable in
   // local dev. Cascades clean up their documents/SSM/screening rows in the
   // database, but not the uploaded files on disk - remove those first.
@@ -191,7 +257,7 @@ async function main() {
     },
   });
 
-  await prisma.ctosEnquiry.create({
+  const ctosCompanyEnquiry = await prisma.ctosEnquiry.create({
     data: {
       vendorId: nexa.id,
       subjectType: "company",
@@ -252,6 +318,7 @@ async function main() {
         ],
       },
     },
+    include: { legalCases: true },
   });
 
   const ctosDirectorDoc = await prisma.document.create({
@@ -292,7 +359,7 @@ async function main() {
     },
   });
 
-  await prisma.ctosEnquiry.create({
+  const ctosDirectorEnquiry = await prisma.ctosEnquiry.create({
     data: {
       vendorId: nexa.id,
       subjectType: "director",
@@ -314,6 +381,7 @@ async function main() {
         ],
       },
     },
+    include: { legalCases: true },
   });
 
   const netrevealDoc = await prisma.document.create({
@@ -339,7 +407,7 @@ async function main() {
     },
   });
 
-  await prisma.netrevealRecord.create({
+  const netrevealRecord = await prisma.netrevealRecord.create({
     data: {
       vendorId: nexa.id,
       subjectType: "director",
@@ -370,7 +438,7 @@ async function main() {
   // false positive, a confirmed relevant finding, and one left pending (on
   // a high-sensitivity theme) to demonstrate the Vendor Profile's unresolved
   // sanctions/financial-crime flag without any manual clicking required.
-  await prisma.adverseMediaSearch.create({
+  const adverseMediaSearchNexa = await prisma.adverseMediaSearch.create({
     data: {
       vendorId: nexa.id,
       subjectType: "company",
@@ -421,11 +489,120 @@ async function main() {
         ],
       },
     },
+    include: { articles: true },
+  });
+
+  // Module 4 sample data for Nexa: pre-baked risk_triage_results for a mix
+  // of the still-pending findings above (one per source type, plus a couple
+  // more), so the Triage Queue has a realistic confidence spread to demo
+  // sort order immediately - same reasoning as the hardcoded AI Summary and
+  // article ai_summary text above: seed data shouldn't depend on a live AI
+  // call. A reviewer can still click "Run Triage" to refresh these.
+  const ctosCompanyDefendantCase = ctosCompanyEnquiry.legalCases.find(
+    (c) => c.caseType === "defendant"
+  )!;
+  const ctosCompanyPlaintiffCase = ctosCompanyEnquiry.legalCases.find(
+    (c) => c.caseType === "plaintiff"
+  )!;
+  const ctosDirectorCase = ctosDirectorEnquiry.legalCases[0];
+  const pendingArticle = adverseMediaSearchNexa.articles.find(
+    (a) => a.reviewerDecision === "pending"
+  )!;
+
+  await prisma.riskTriageResult.createMany({
+    data: [
+      {
+        vendorId: nexa.id,
+        sourceType: "ctos_legal_case",
+        sourceRecordId: ctosCompanyDefendantCase.id,
+        subjectType: "company",
+        subjectName: nexa.companyName,
+        confidenceScore: 78,
+        aiRationale:
+          "Nexa Innovations Sdn Bhd is named directly as defendant in an ongoing breach-of-contract case, an exact name match with no ambiguity. No prior triage history or cross-vendor links exist for this identity, but an active, unresolved legal case against the company itself is a concrete, current risk signal.",
+        suggestedDecision: "relevant",
+      },
+      {
+        vendorId: nexa.id,
+        sourceType: "netreveal",
+        sourceRecordId: netrevealRecord.id,
+        subjectType: "director",
+        subjectName: wong.name,
+        confidenceScore: 62,
+        aiRationale:
+          "Exact name, IC number, and nationality match support a real connection to Wong Kah Meng, but the watchlist detail itself references a separate, resolved 2019 directorship with no sanctions link. A related CTOS legal case for the same company adds some weight, so human confirmation is warranted rather than an automatic dismissal.",
+        suggestedDecision: "needs_review",
+      },
+      {
+        vendorId: nexa.id,
+        sourceType: "adverse_media",
+        sourceRecordId: pendingArticle.id,
+        subjectType: "company",
+        subjectName: nexa.companyName,
+        confidenceScore: 45,
+        aiRationale:
+          "The sanctions screening tool returned only a partial name match against a similarly-named company, and it is not yet confirmed whether this refers to Nexa Innovations Sdn Bhd at all. Given the ambiguity and the high-sensitivity sanctions theme, this needs a reviewer's judgement rather than an automatic call.",
+        suggestedDecision: "needs_review",
+      },
+      {
+        vendorId: nexa.id,
+        sourceType: "ctos_legal_case",
+        sourceRecordId: ctosDirectorCase.id,
+        subjectType: "director",
+        subjectName: wong.name,
+        confidenceScore: 30,
+        aiRationale:
+          "This case lists the company, not Wong Kah Meng personally, as defendant, and the record is still unverified. The director's personal exposure here is indirect at best, so this is unlikely to represent a genuine individual risk.",
+        suggestedDecision: "false_positive",
+      },
+      {
+        vendorId: nexa.id,
+        sourceType: "ctos_legal_case",
+        sourceRecordId: ctosCompanyPlaintiffCase.id,
+        subjectType: "company",
+        subjectName: nexa.companyName,
+        confidenceScore: 20,
+        aiRationale:
+          "Nexa Innovations Sdn Bhd is the plaintiff pursuing an unpaid-invoices claim, not a defendant - this reflects the company protecting its own receivables rather than facing legal exposure, so it is unlikely to represent a genuine compliance risk.",
+        suggestedDecision: "false_positive",
+      },
+    ],
+  });
+
+  // Module 6/7 (Knowledge Repository) Section 6: finalize a couple of these
+  // triage decisions on seed - mirrors what PUT /risk-triage/:id/decision
+  // does (sync risk_triage_results and the underlying source row together)
+  // so there's real finalized data ready to reindex and search immediately,
+  // without needing to click through the Triage queue first.
+  const finalizedReviewedAt = new Date();
+  await prisma.riskTriageResult.updateMany({
+    where: { sourceType: "ctos_legal_case", sourceRecordId: ctosCompanyDefendantCase.id },
+    data: {
+      reviewerFinalDecision: "relevant",
+      reviewedById: reviewer.id,
+      reviewedAt: finalizedReviewedAt,
+    },
+  });
+  await prisma.ctosLegalCase.update({
+    where: { id: ctosCompanyDefendantCase.id },
+    data: { riskDecision: "relevant" },
+  });
+  await prisma.riskTriageResult.updateMany({
+    where: { sourceType: "ctos_legal_case", sourceRecordId: ctosDirectorCase.id },
+    data: {
+      reviewerFinalDecision: "false_positive",
+      reviewedById: reviewer.id,
+      reviewedAt: finalizedReviewedAt,
+    },
+  });
+  await prisma.ctosLegalCase.update({
+    where: { id: ctosDirectorCase.id },
+    data: { riskDecision: "false_positive" },
   });
 
   // Vendor 2: freshly extracted, still awaiting reviewer confirmation on
   // everything except corporate info - shows the "AI-extracted" UI state.
-  await prisma.vendor.create({
+  const brightPathway = await prisma.vendor.create({
     data: {
       companyName: "Bright Pathway Trading Sdn Bhd",
       registrationNo: "201502987654",
@@ -468,6 +645,67 @@ async function main() {
             name: "Lee Chin Hwa",
             totalShares: 100000,
             isVerified: false,
+          },
+        ],
+      },
+    },
+  });
+
+  // Module 5/6/7 sample data for Bright Pathway: one already-approved KYV
+  // report, so there's a second vendor's worth of indexed data alongside
+  // Nexa's triage decisions above - together they demo cross-vendor
+  // retrieval (VISTA_module6_system_prompt.md Section 6) once reindexed.
+  await prisma.kyvReport.create({
+    data: {
+      vendorId: brightPathway.id,
+      templateId: kyvTemplate.id,
+      status: "approved",
+      preparedById: reviewer.id,
+      reviewedById: reviewer.id,
+      reviewedAt: new Date(),
+      generatedByModel: "openai/gpt-oss-120b",
+      sections: {
+        create: [
+          {
+            sectionKey: "executive_summary",
+            title: "Executive Summary",
+            content:
+              "Bright Pathway Trading Sdn Bhd (Reg. No. 201502987654) is an active Malaysian general trading and distribution company, renamed from Pathway Trading Sdn Bhd in 2019. It is closely held by its sole director, Ahmad Faizal bin Ismail (150,000 shares), and one other shareholder, Lee Chin Hwa (100,000 shares). No CTOS financial data, legal cases, NetReveal hits, or adverse media findings have been identified for this vendor. Overall risk is assessed as low, with the main gap being that the director's and shareholders' identities are not yet independently verified.",
+            sectionOrder: 0,
+          },
+          {
+            sectionKey: "corporate_profile",
+            title: "Corporate Profile",
+            content:
+              "The company was incorporated on 20 May 2015 and changed its name from Pathway Trading Sdn Bhd to Bright Pathway Trading Sdn Bhd on 1 August 2019. Its stated business is general trading and distribution of consumer goods, and its corporate registration record is verified. The sole director, Ahmad Faizal bin Ismail (IC 780909-05-6677), also holds 150,000 of the company's 250,000 total shares; the remaining 100,000 shares are held by Lee Chin Hwa (IC 820101-08-3344). Neither the director nor the shareholders have been independently verified against supporting identification documents.",
+            sectionOrder: 1,
+          },
+          {
+            sectionKey: "financial_summary",
+            title: "Financial Summary",
+            content:
+              "No CTOS financial highlights have been submitted for Bright Pathway Trading Sdn Bhd, so no revenue, profitability, or liquidity ratios are available for this review.",
+            sectionOrder: 2,
+          },
+          {
+            sectionKey: "legal_regulatory_findings",
+            title: "Legal & Regulatory Findings",
+            content:
+              "No confirmed-relevant CTOS legal cases or NetReveal watchlist hits have been recorded for Bright Pathway Trading Sdn Bhd or its director and shareholders.",
+            sectionOrder: 3,
+          },
+          {
+            sectionKey: "adverse_media_findings",
+            title: "Adverse Media Findings",
+            content: "No confirmed-relevant adverse media articles have been identified for Bright Pathway Trading Sdn Bhd.",
+            sectionOrder: 4,
+          },
+          {
+            sectionKey: "risk_assessment_recommendation",
+            title: "Risk Assessment & Recommendation",
+            content:
+              "Bright Pathway Trading Sdn Bhd presents a low commercial risk profile: there are no legal, regulatory, or reputational findings on record. The principal residual risk is the lack of independent verification for the director and both shareholders, which is a standard onboarding gap rather than a sign of misconduct. Recommendation: approve the vendor subject to conditions - obtain verified identification documents for Ahmad Faizal bin Ismail and Lee Chin Hwa, and request recent financial statements to establish a baseline for future monitoring.",
+            sectionOrder: 5,
           },
         ],
       },

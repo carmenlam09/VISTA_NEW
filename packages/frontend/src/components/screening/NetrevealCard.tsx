@@ -11,6 +11,14 @@ import type { NetrevealRecord } from "@/types/screening";
 
 import { SubjectBadge } from "./SubjectBadge";
 
+// Set from the Triage queue (Module 4) - shown here too so a decision made
+// there is visible back in its original module.
+const RISK_DECISION_BADGE = {
+  pending: { variant: "warning" as const, label: "Triage: Pending" },
+  relevant: { variant: "destructive" as const, label: "Triage: Relevant" },
+  false_positive: { variant: "secondary" as const, label: "Triage: False Positive" },
+};
+
 function toForm(record: NetrevealRecord): NetrevealUpdateInput {
   return {
     dob_doi: record.dobDoi?.slice(0, 10) ?? null,
@@ -46,11 +54,16 @@ export function NetrevealCard({
     >
       <div className="mb-3 flex items-center justify-between">
         <SubjectBadge subjectType={record.subjectType} subjectName={record.subjectName} />
-        {verified ? (
-          <Badge variant="success">Verified</Badge>
-        ) : (
-          <Badge variant="warning">Needs review</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          <Badge variant={RISK_DECISION_BADGE[record.riskDecision].variant}>
+            {RISK_DECISION_BADGE[record.riskDecision].label}
+          </Badge>
+          {verified ? (
+            <Badge variant="success">Verified</Badge>
+          ) : (
+            <Badge variant="warning">Needs review</Badge>
+          )}
+        </div>
       </div>
 
       {hasWatchHit && (

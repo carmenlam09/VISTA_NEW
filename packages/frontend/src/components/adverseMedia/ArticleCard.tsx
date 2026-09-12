@@ -7,9 +7,14 @@ import type { AdverseMediaArticle } from "@/types/adverseMedia";
 export function ArticleCard({
   vendorId,
   article,
+  hideDecisionControls = false,
 }: {
   vendorId: string;
   article: AdverseMediaArticle;
+  /** The Triage queue has its own Relevant/False Positive control that keeps
+   * risk_triage_results in sync too - hide this card's own to avoid two
+   * controls for the same decision going through different endpoints. */
+  hideDecisionControls?: boolean;
 }) {
   const setDecision = useSetArticleDecision(vendorId);
   const isRelevant = article.reviewerDecision === "relevant";
@@ -54,24 +59,26 @@ export function ArticleCard({
 
       <p className="mt-2 text-sm">{article.aiSummary}</p>
 
-      <div className="mt-3 flex items-center gap-2">
-        <Button
-          size="sm"
-          variant={isRelevant ? "default" : "outline"}
-          disabled={setDecision.isPending}
-          onClick={() => decide("relevant")}
-        >
-          Relevant
-        </Button>
-        <Button
-          size="sm"
-          variant={isFalsePositive ? "default" : "outline"}
-          disabled={setDecision.isPending}
-          onClick={() => decide("false_positive")}
-        >
-          False Positive
-        </Button>
-      </div>
+      {!hideDecisionControls && (
+        <div className="mt-3 flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={isRelevant ? "default" : "outline"}
+            disabled={setDecision.isPending}
+            onClick={() => decide("relevant")}
+          >
+            Relevant
+          </Button>
+          <Button
+            size="sm"
+            variant={isFalsePositive ? "default" : "outline"}
+            disabled={setDecision.isPending}
+            onClick={() => decide("false_positive")}
+          >
+            False Positive
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
