@@ -1,4 +1,7 @@
+import { ExternalLink } from "lucide-react";
+
 import { SubjectBadge } from "@/components/screening/SubjectBadge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type DecidableDecision, useSetArticleDecision } from "@/hooks/useAdverseMediaMutations";
 import { cn } from "@/lib/utils";
@@ -57,7 +60,31 @@ export function ArticleCard({
         )}
       </div>
 
-      <p className="mt-2 text-sm">{article.aiSummary}</p>
+      {article.categorizationStatus === "pending" && (
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Badge variant="warning">Summary pending</Badge>
+          AI summary is still being generated for this article.
+        </p>
+      )}
+      {article.categorizationStatus === "failed" && (
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Badge variant="destructive">Summary unavailable</Badge>
+          The AI summary could not be generated - review the article directly.
+        </p>
+      )}
+      {article.categorizationStatus === "completed" && (
+        <p className="mt-2 text-sm">{article.aiSummary}</p>
+      )}
+
+      <a
+        href={article.articleUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+      >
+        View article
+        <ExternalLink className="h-3 w-3" />
+      </a>
 
       {!hideDecisionControls && (
         <div className="mt-3 flex items-center gap-2">

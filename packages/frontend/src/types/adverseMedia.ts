@@ -47,6 +47,7 @@ export interface AdverseMediaSearchRun {
 }
 
 export type ReviewerDecision = "pending" | "relevant" | "false_positive";
+export type CategorizationStatus = "pending" | "completed" | "failed";
 
 export interface AdverseMediaArticle {
   id: string;
@@ -57,7 +58,8 @@ export interface AdverseMediaArticle {
   sourceDomain: string | null;
   publishedDate: string | null;
   riskTheme: RiskTheme;
-  aiSummary: string;
+  aiSummary: string | null;
+  categorizationStatus: CategorizationStatus;
   reviewerDecision: ReviewerDecision;
   reviewedById: string | null;
   reviewedAt: string | null;

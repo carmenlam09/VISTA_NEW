@@ -4,6 +4,7 @@ import express from "express";
 import { errorHandler } from "./middleware/errorHandler";
 import { adverseMediaArticlesRouter } from "./routes/adverseMediaArticles";
 import { ctosEnquiriesRouter } from "./routes/ctosEnquiries";
+import { dashboardRouter } from "./routes/dashboard";
 import { documentsRouter } from "./routes/documents";
 import { filesRouter } from "./routes/files";
 import { keywordLibraryRouter } from "./routes/keywordLibrary";
@@ -24,6 +25,7 @@ export function createApp() {
     res.json({ status: "ok" });
   });
 
+  app.use("/api/dashboard", dashboardRouter);
   app.use("/api/vendors", vendorsRouter);
   app.use("/api/documents", documentsRouter);
   app.use("/api/files", filesRouter);

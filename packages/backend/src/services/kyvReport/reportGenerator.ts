@@ -92,7 +92,7 @@ async function buildDataPackage(vendorId: string) {
       articleTitle: a.articleTitle,
       sourceDomain: a.sourceDomain,
       riskTheme: a.riskTheme,
-      aiSummary: a.aiSummary,
+      aiSummary: a.aiSummary ?? "AI summary not available for this article.",
       triageRationale: rationaleFor("adverse_media", a.id),
     })),
   };

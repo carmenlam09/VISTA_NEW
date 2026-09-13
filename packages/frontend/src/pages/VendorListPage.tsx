@@ -1,10 +1,19 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { DashboardOverview } from "@/components/dashboard/DashboardOverview";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useVendors } from "@/hooks/useVendors";
 import { useCreateVendor, useDeleteVendor } from "@/hooks/useVendorMutations";
+
+const STATUS_BADGE: Record<string, { variant: BadgeProps["variant"]; label: string }> = {
+  draft: { variant: "secondary", label: "Draft" },
+  in_review: { variant: "warning", label: "In Review" },
+  approved: { variant: "success", label: "Approved" },
+  rejected: { variant: "destructive", label: "Rejected" },
+};
 
 export function VendorListPage() {
   const { data: vendors, isLoading, isError } = useVendors();
@@ -33,10 +42,21 @@ export function VendorListPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-5xl space-y-8">
+      <div>
+        <h1 className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
+          Dashboard
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          An overview of vendor risk screening activity across VISTA.
+        </p>
+      </div>
+
+      <DashboardOverview />
+
+      <div className="flex items-center justify-between border-t border-border pt-6">
         <div>
-          <h1 className="text-xl font-semibold">Vendors</h1>
+          <h2 className="text-base font-semibold">Vendors</h2>
           <p className="text-sm text-muted-foreground">
             Select a vendor to continue their KYV review, or start a new intake.
           </p>
@@ -71,9 +91,9 @@ export function VendorListPage() {
         <p className="text-xs text-destructive">{deleteVendor.error.message}</p>
       )}
 
-      <div className="rounded-lg border border-border">
+      <div className="overflow-hidden rounded-lg border border-border">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-border text-muted-foreground">
+          <thead className="border-b border-border bg-secondary/60 text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Company Name</th>
               <th className="px-4 py-3 font-medium">Registration No.</th>
@@ -105,10 +125,17 @@ export function VendorListPage() {
               </tr>
             )}
             {vendors?.map((vendor) => (
-              <tr key={vendor.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-3">{vendor.companyName}</td>
+              <tr
+                key={vendor.id}
+                className="border-b border-border transition-colors last:border-0 hover:bg-accent/40"
+              >
+                <td className="px-4 py-3 font-medium">{vendor.companyName}</td>
                 <td className="px-4 py-3">{vendor.registrationNo ?? "—"}</td>
-                <td className="px-4 py-3">{vendor.status}</td>
+                <td className="px-4 py-3">
+                  <Badge variant={(STATUS_BADGE[vendor.status] ?? STATUS_BADGE.draft).variant}>
+                    {(STATUS_BADGE[vendor.status] ?? STATUS_BADGE.draft).label}
+                  </Badge>
+                </td>
                 <td className="px-4 py-3">
                   {new Date(vendor.createdAt).toLocaleDateString()}
                 </td>

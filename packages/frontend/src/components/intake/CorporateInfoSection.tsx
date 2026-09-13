@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,10 @@ import { type CorporateInfoInput, useUpdateCorporateInfo } from "@/hooks/useVend
 import type { SsmCorporateInfo } from "@/types/vendor";
 
 import { FieldLabel } from "./FieldLabel";
+
+export interface ConfirmableSectionHandle {
+  confirmAll: () => void;
+}
 
 function toForm(info: SsmCorporateInfo | null): CorporateInfoInput {
   return {
@@ -20,16 +24,23 @@ function toForm(info: SsmCorporateInfo | null): CorporateInfoInput {
   };
 }
 
-export function CorporateInfoSection({
-  vendorId,
-  corporateInfo,
-}: {
-  vendorId: string;
-  corporateInfo: SsmCorporateInfo | null;
-}) {
+export const CorporateInfoSection = forwardRef<
+  ConfirmableSectionHandle,
+  { vendorId: string; corporateInfo: SsmCorporateInfo | null }
+>(function CorporateInfoSection({ vendorId, corporateInfo }, ref) {
   const [form, setForm] = useState<CorporateInfoInput>(() => toForm(corporateInfo));
+  const [savedForm, setSavedForm] = useState<CorporateInfoInput>(() => toForm(corporateInfo));
   const updateCorporateInfo = useUpdateCorporateInfo(vendorId);
   const verified = corporateInfo?.isVerified ?? false;
+  // Once verified, only re-enable the button if the reviewer edits something new.
+  const isDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
+  const canSave = !verified || isDirty;
+
+  function save() {
+    updateCorporateInfo.mutate(form, { onSuccess: () => setSavedForm(form) });
+  }
+
+  useImperativeHandle(ref, () => ({ confirmAll: save }));
 
   function set<K extends keyof CorporateInfoInput>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value === "" ? null : value }));
@@ -98,14 +109,10 @@ export function CorporateInfoSection({
       )}
 
       <div className="mt-3 flex justify-end">
-        <Button
-          size="sm"
-          disabled={updateCorporateInfo.isPending}
-          onClick={() => updateCorporateInfo.mutate(form)}
-        >
+        <Button size="sm" disabled={updateCorporateInfo.isPending || !canSave} onClick={save}>
           {updateCorporateInfo.isPending ? "Saving..." : "Confirm & Save"}
         </Button>
       </div>
     </section>
   );
-}
+});

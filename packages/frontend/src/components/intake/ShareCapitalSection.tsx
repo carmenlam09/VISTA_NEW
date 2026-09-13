@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,18 +6,29 @@ import { Input } from "@/components/ui/input";
 import { useUpdateShareCapital } from "@/hooks/useVendorMutations";
 import type { SsmShareCapital } from "@/types/vendor";
 
+import type { ConfirmableSectionHandle } from "./CorporateInfoSection";
 import { FieldLabel } from "./FieldLabel";
 
-export function ShareCapitalSection({
-  vendorId,
-  shareCapital,
-}: {
-  vendorId: string;
-  shareCapital: SsmShareCapital | null;
-}) {
+export const ShareCapitalSection = forwardRef<
+  ConfirmableSectionHandle,
+  { vendorId: string; shareCapital: SsmShareCapital | null }
+>(function ShareCapitalSection({ vendorId, shareCapital }, ref) {
   const [value, setValue] = useState(shareCapital?.paidUpCapital ?? "");
+  const [savedValue, setSavedValue] = useState(shareCapital?.paidUpCapital ?? "");
   const updateShareCapital = useUpdateShareCapital(vendorId);
   const verified = shareCapital?.isVerified ?? false;
+  // Once verified, only re-enable the button if the reviewer edits the value.
+  const isDirty = value !== savedValue;
+  const canSave = !verified || isDirty;
+
+  function save() {
+    updateShareCapital.mutate(
+      { paid_up_capital: value === "" ? null : Number(value) },
+      { onSuccess: () => setSavedValue(value) }
+    );
+  }
+
+  useImperativeHandle(ref, () => ({ confirmAll: save }));
 
   return (
     <section className="rounded-lg border border-border p-4">
@@ -45,18 +56,10 @@ export function ShareCapitalSection({
       )}
 
       <div className="mt-3 flex justify-end">
-        <Button
-          size="sm"
-          disabled={updateShareCapital.isPending}
-          onClick={() =>
-            updateShareCapital.mutate({
-              paid_up_capital: value === "" ? null : Number(value),
-            })
-          }
-        >
+        <Button size="sm" disabled={updateShareCapital.isPending || !canSave} onClick={save}>
           {updateShareCapital.isPending ? "Saving..." : "Confirm & Save"}
         </Button>
       </div>
     </section>
   );
-}
+});

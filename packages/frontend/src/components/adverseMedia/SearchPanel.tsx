@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { SubjectPicker } from "@/components/screening/SubjectPicker";
 import { Button } from "@/components/ui/button";
@@ -10,39 +10,34 @@ import type { Subject } from "@/types/screening";
 export function SearchPanel({ vendorId }: { vendorId: string }) {
   const [subject, setSubject] = useState<Subject | null>(null);
   const { data: activeKeywords } = useKeywordLibrary({ is_active: true });
-  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
+  // Nothing pre-checked - the reviewer opts in to whichever keywords they want.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [extraKeywordsText, setExtraKeywordsText] = useState("");
   const runSearch = useRunAdverseMediaSearch(vendorId);
 
-  // Pre-check every active keyword by default, once - so later refetches
-  // (e.g. after running a search) don't clobber the reviewer's edits.
-  useEffect(() => {
-    if (activeKeywords && selectedIds === null) {
-      setSelectedIds(new Set(activeKeywords.map((k) => k.id)));
-    }
-  }, [activeKeywords, selectedIds]);
-
   function toggleKeyword(id: string) {
     setSelectedIds((prev) => {
-      const next = new Set(prev ?? []);
+      const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
   }
 
+  const extraKeywords = extraKeywordsText
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const canSearch = Boolean(subject) && (selectedIds.size > 0 || extraKeywords.length > 0);
+
   function handleRunSearch() {
-    if (!subject) return;
-    const extraKeywords = extraKeywordsText
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    if (!canSearch || !subject) return;
 
     runSearch.mutate({
       subject_type: subject.type,
       related_director_id: subject.type === "director" ? subject.id : undefined,
       related_shareholder_id: subject.type === "shareholder" ? subject.id : undefined,
-      keyword_ids: selectedIds ? Array.from(selectedIds) : undefined,
+      keyword_ids: Array.from(selectedIds),
       extra_keywords: extraKeywords.length > 0 ? extraKeywords : undefined,
     });
   }
@@ -72,7 +67,7 @@ export function SearchPanel({ vendorId }: { vendorId: string }) {
                 >
                   <input
                     type="checkbox"
-                    checked={selectedIds?.has(k.id) ?? false}
+                    checked={selectedIds.has(k.id)}
                     onChange={() => toggleKeyword(k.id)}
                   />
                   {k.keyword}
@@ -97,8 +92,13 @@ export function SearchPanel({ vendorId }: { vendorId: string }) {
           <p className="text-xs text-destructive">{runSearch.error.message}</p>
         )}
 
-        <div className="flex justify-end">
-          <Button disabled={!subject || runSearch.isPending} onClick={handleRunSearch}>
+        <div className="flex items-center justify-end gap-2">
+          {subject && !canSearch && (
+            <p className="text-xs text-muted-foreground">
+              Select at least one keyword, or enter an extra keyword above.
+            </p>
+          )}
+          <Button disabled={!canSearch || runSearch.isPending} onClick={handleRunSearch}>
             {runSearch.isPending ? "Searching..." : "Run Search"}
           </Button>
         </div>

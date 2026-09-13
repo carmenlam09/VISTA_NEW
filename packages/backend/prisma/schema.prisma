@@ -367,7 +367,8 @@ model AdverseMediaArticle {
   sourceDomain  String?   @map("source_domain") @db.VarChar(255)
   publishedDate DateTime? @map("published_date") @db.Date
   riskTheme     String    @default("other") @map("risk_theme") @db.VarChar(50) // AI-assigned, from the same taxonomy as the keyword library
-  aiSummary     String    @map("ai_summary") @db.Text // paraphrased brief summary; feeds Module 5 KYV report
+  aiSummary     String?   @map("ai_summary") @db.Text // paraphrased brief summary; feeds Module 5 KYV report; null until categorized
+  categorizationStatus String @default("pending") @map("categorization_status") @db.VarChar(20) // 'pending' | 'completed' | 'failed' - the article link is saved as soon as it's found by SERP, independent of whether the AI summary step below succeeds
 
   reviewerDecision String    @default("pending") @map("reviewer_decision") @db.VarChar(20) // 'pending' | 'relevant' | 'false_positive'
   reviewedById     String?   @map("reviewed_by") @db.Uuid

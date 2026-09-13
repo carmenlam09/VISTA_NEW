@@ -460,6 +460,7 @@ async function main() {
             riskTheme: "other",
             aiSummary:
               "This article covers an unrelated technology company with a similar name receiving an industry award; it does not concern Nexa Innovations Sdn Bhd.",
+            categorizationStatus: "completed",
             reviewerDecision: "false_positive",
             reviewedById: reviewer.id,
             reviewedAt: new Date(),
@@ -472,6 +473,7 @@ async function main() {
             riskTheme: "regulatory_breach",
             aiSummary:
               "A sector regulator issued a compliance notice concerning data handling practices at systems integration firms, naming Nexa Innovations Sdn Bhd among those under review.",
+            categorizationStatus: "completed",
             reviewerDecision: "relevant",
             reviewedById: reviewer.id,
             reviewedAt: new Date(),
@@ -484,6 +486,7 @@ async function main() {
             riskTheme: "sanctions",
             aiSummary:
               "An automated sanctions screening tool returned a partial name match for a similarly-named company; not yet confirmed whether this refers to the same entity.",
+            categorizationStatus: "completed",
             // reviewerDecision left unset -> defaults to "pending".
           },
         ],

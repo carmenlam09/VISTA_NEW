@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 
-import { CorporateInfoSection } from "@/components/intake/CorporateInfoSection";
+import {
+  type ConfirmableSectionHandle,
+  CorporateInfoSection,
+} from "@/components/intake/CorporateInfoSection";
 import { DirectorsSection } from "@/components/intake/DirectorsSection";
 import { DocumentUploadZone } from "@/components/intake/DocumentUploadZone";
 import { PdfPreviewPane } from "@/components/intake/PdfPreviewPane";
@@ -23,6 +26,18 @@ export function IntakePage() {
   const { data: vendor, isLoading, isError } = useVendor(vendorId);
   const extractDocument = useExtractDocument(vendorId);
   const autoTriggered = useRef<string | null>(null);
+
+  const corporateInfoRef = useRef<ConfirmableSectionHandle>(null);
+  const shareCapitalRef = useRef<ConfirmableSectionHandle>(null);
+  const directorsRef = useRef<ConfirmableSectionHandle>(null);
+  const shareholdersRef = useRef<ConfirmableSectionHandle>(null);
+
+  function handleConfirmAll() {
+    corporateInfoRef.current?.confirmAll();
+    shareCapitalRef.current?.confirmAll();
+    directorsRef.current?.confirmAll();
+    shareholdersRef.current?.confirmAll();
+  }
 
   const ssmDoc = vendor ? latestByType(vendor.documents, "ssm_report") : undefined;
   const supplierFormDoc = vendor
@@ -46,8 +61,19 @@ export function IntakePage() {
     return <p className="text-sm text-destructive">Could not load this vendor.</p>;
   }
 
+  // Same "is this section actually verified" rule as VendorHeader's count -
+  // an empty directors/shareholders list means "nothing captured yet", not
+  // "verified".
+  const allSectionsVerified =
+    (vendor.corporateInfo?.isVerified ?? false) &&
+    (vendor.shareCapital?.isVerified ?? false) &&
+    vendor.directors.length > 0 &&
+    vendor.directors.every((d) => d.isVerified) &&
+    vendor.shareholders.length > 0 &&
+    vendor.shareholders.every((s) => s.isVerified);
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="mx-auto max-w-[1600px] space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <DocumentUploadZone
           vendorId={vendorId}
@@ -106,10 +132,30 @@ export function IntakePage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <PdfPreviewPane documentId={ssmDoc.id} />
           <div className="space-y-4">
-            <CorporateInfoSection vendorId={vendorId} corporateInfo={vendor.corporateInfo} />
-            <ShareCapitalSection vendorId={vendorId} shareCapital={vendor.shareCapital} />
-            <DirectorsSection vendorId={vendorId} directors={vendor.directors} />
-            <ShareholdersSection vendorId={vendorId} shareholders={vendor.shareholders} />
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Review each section below, or confirm everything at once.
+              </p>
+              <Button size="sm" variant="outline" disabled={allSectionsVerified} onClick={handleConfirmAll}>
+                Confirm &amp; Save All
+              </Button>
+            </div>
+            <CorporateInfoSection
+              ref={corporateInfoRef}
+              vendorId={vendorId}
+              corporateInfo={vendor.corporateInfo}
+            />
+            <ShareCapitalSection
+              ref={shareCapitalRef}
+              vendorId={vendorId}
+              shareCapital={vendor.shareCapital}
+            />
+            <DirectorsSection ref={directorsRef} vendorId={vendorId} directors={vendor.directors} />
+            <ShareholdersSection
+              ref={shareholdersRef}
+              vendorId={vendorId}
+              shareholders={vendor.shareholders}
+            />
           </div>
         </div>
       )}

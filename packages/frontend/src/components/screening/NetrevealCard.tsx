@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FieldLabel } from "@/components/intake/FieldLabel";
 import { Badge } from "@/components/ui/badge";
@@ -37,12 +37,40 @@ export function NetrevealCard({
   record: NetrevealRecord;
 }) {
   const [form, setForm] = useState<NetrevealUpdateInput>(() => toForm(record));
+  const [savedForm, setSavedForm] = useState<NetrevealUpdateInput>(() => toForm(record));
   const updateNetreveal = useUpdateNetrevealRecord(vendorId);
   const hasWatchHit = Boolean(record.watchpersonDetails?.trim());
   const verified = record.isVerified;
+  // Once verified, only re-enable the button if the reviewer edits something new.
+  const isDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
+  const canSave = !verified || isDirty;
+
+  // This card is created immediately on upload (fields still blank) and kept
+  // mounted (same key) while extraction runs in the background - resync the
+  // form whenever the underlying record's fields actually change (extraction
+  // filling them in, or a save elsewhere), so this card doesn't keep showing
+  // its stale blank initial state once real data arrives.
+  useEffect(() => {
+    const next = toForm(record);
+    setForm(next);
+    setSavedForm(next);
+  }, [
+    record.dobDoi,
+    record.nationality,
+    record.checkName,
+    record.uid,
+    record.watchpersonDetails,
+  ]);
 
   function set<K extends keyof NetrevealUpdateInput>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value === "" ? null : value }));
+  }
+
+  function save() {
+    updateNetreveal.mutate(
+      { recordId: record.id, input: form },
+      { onSuccess: () => setSavedForm(form) }
+    );
   }
 
   return (
@@ -108,11 +136,7 @@ export function NetrevealCard({
       )}
 
       <div className="mt-3 flex justify-end">
-        <Button
-          size="sm"
-          disabled={updateNetreveal.isPending}
-          onClick={() => updateNetreveal.mutate({ recordId: record.id, input: form })}
-        >
+        <Button size="sm" disabled={updateNetreveal.isPending || !canSave} onClick={save}>
           {updateNetreveal.isPending ? "Saving..." : "Confirm & Save"}
         </Button>
       </div>

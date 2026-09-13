@@ -1,5 +1,7 @@
-import { Link, useParams } from "react-router-dom";
+import { Home } from "lucide-react";
+import { Link, useLocation, useParams } from "react-router-dom";
 
+import { Button } from "@/components/ui/button";
 import { useVendor } from "@/hooks/useVendor";
 
 function BackToVendorsLink() {
@@ -13,14 +15,29 @@ function BackToVendorsLink() {
   );
 }
 
+function HomeButton() {
+  return (
+    <Button asChild variant="outline" size="sm">
+      <Link to="/" aria-label="Home - back to vendor list">
+        <Home className="mr-1.5 h-4 w-4" />
+        Home
+      </Link>
+    </Button>
+  );
+}
+
 export function VendorHeader() {
   const { vendorId } = useParams<{ vendorId: string }>();
   const { data: vendor } = useVendor(vendorId);
+  const { pathname } = useLocation();
 
   if (!vendorId) {
     return (
       <header className="flex items-center justify-between border-b border-border px-6 py-4">
-        <div className="text-base font-semibold">No vendor selected</div>
+        <div className="text-base font-semibold">
+          {pathname === "/" ? "Welcome back" : "No vendor selected"}
+        </div>
+        <HomeButton />
       </header>
     );
   }
@@ -32,6 +49,7 @@ export function VendorHeader() {
           <BackToVendorsLink />
           <div className="text-base font-semibold text-muted-foreground">Loading vendor...</div>
         </div>
+        <HomeButton />
       </header>
     );
   }
@@ -60,6 +78,7 @@ export function VendorHeader() {
           {verifiedCount} of 4 sections verified
         </div>
       </div>
+      <HomeButton />
     </header>
   );
 }

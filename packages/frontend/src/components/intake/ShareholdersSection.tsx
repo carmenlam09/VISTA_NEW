@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import {
 } from "@/hooks/useVendorMutations";
 import type { SsmShareholder } from "@/types/vendor";
 
+import type { ConfirmableSectionHandle } from "./CorporateInfoSection";
+
 interface DraftRow extends ShareholderInput {
   tempId: string;
 }
@@ -22,13 +24,10 @@ const emptyDraft = (): DraftRow => ({
   total_shares: null,
 });
 
-export function ShareholdersSection({
-  vendorId,
-  shareholders,
-}: {
-  vendorId: string;
-  shareholders: SsmShareholder[];
-}) {
+export const ShareholdersSection = forwardRef<
+  ConfirmableSectionHandle,
+  { vendorId: string; shareholders: SsmShareholder[] }
+>(function ShareholdersSection({ vendorId, shareholders }, ref) {
   const [edits, setEdits] = useState<Record<string, Partial<ShareholderInput>>>({});
   const [drafts, setDrafts] = useState<DraftRow[]>([]);
 
@@ -38,6 +37,8 @@ export function ShareholdersSection({
 
   const unverifiedCount = shareholders.filter((s) => !s.isVerified).length;
   const sectionVerified = shareholders.length === 0 || unverifiedCount === 0;
+
+  useImperativeHandle(ref, () => ({ confirmAll: confirmSection }));
 
   function setEdit(id: string, patch: Partial<ShareholderInput>) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -239,4 +240,4 @@ export function ShareholdersSection({
       </div>
     </section>
   );
-}
+});

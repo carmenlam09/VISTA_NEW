@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import {
 } from "@/hooks/useVendorMutations";
 import type { SsmDirector } from "@/types/vendor";
 
+import type { ConfirmableSectionHandle } from "./CorporateInfoSection";
+
 interface DraftRow extends DirectorInput {
   tempId: string;
 }
@@ -22,13 +24,10 @@ const emptyDraft = (): DraftRow => ({
   designation: null,
 });
 
-export function DirectorsSection({
-  vendorId,
-  directors,
-}: {
-  vendorId: string;
-  directors: SsmDirector[];
-}) {
+export const DirectorsSection = forwardRef<
+  ConfirmableSectionHandle,
+  { vendorId: string; directors: SsmDirector[] }
+>(function DirectorsSection({ vendorId, directors }, ref) {
   const [edits, setEdits] = useState<Record<string, Partial<DirectorInput>>>({});
   const [drafts, setDrafts] = useState<DraftRow[]>([]);
 
@@ -38,6 +37,8 @@ export function DirectorsSection({
 
   const unverifiedCount = directors.filter((d) => !d.isVerified).length;
   const sectionVerified = directors.length === 0 || unverifiedCount === 0;
+
+  useImperativeHandle(ref, () => ({ confirmAll: confirmSection }));
 
   function setEdit(id: string, patch: Partial<DirectorInput>) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -216,4 +217,4 @@ export function DirectorsSection({
       </div>
     </section>
   );
-}
+});

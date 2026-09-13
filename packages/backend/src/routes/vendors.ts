@@ -1,13 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 
-import { mapSettledWithConcurrency, mapWithConcurrency } from "../lib/concurrency";
+import { mapWithConcurrency } from "../lib/concurrency";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../middleware/errorHandler";
 import { upload } from "../middleware/upload";
 import {
-  CategorizationValidationError,
   type CategorizationResult,
   categorizeArticle,
 } from "../services/categorization/adverseMediaCategorizer";
@@ -254,7 +253,7 @@ vendorsRouter.post(
         name: body.name,
         icPassportNo: body.ic_passport_no,
         designation: body.designation,
-        isVerified: true,
+        isVerified: body.is_verified ?? false,
       },
     });
 
@@ -266,13 +265,18 @@ vendorsRouter.put(
   "/:id/directors/:directorId",
   asyncHandler(async (req, res) => {
     const body = directorSchema.partial().parse(req.body);
+    // Editing the actual content of an already-verified row must reopen it for
+    // review — unless the same request explicitly re-confirms it.
+    const touchesContent =
+      body.name !== undefined || body.ic_passport_no !== undefined || body.designation !== undefined;
+    const isVerified = touchesContent && body.is_verified !== true ? false : body.is_verified;
     const result = await prisma.ssmDirector.updateMany({
       where: { id: req.params.directorId, vendorId: req.params.id },
       data: {
         name: body.name,
         icPassportNo: body.ic_passport_no,
         designation: body.designation,
-        isVerified: body.is_verified,
+        isVerified,
       },
     });
     if (result.count === 0) throw new NotFoundError("Director not found");
@@ -314,7 +318,7 @@ vendorsRouter.post(
         name: body.name,
         icPassportRegistrationNo: body.ic_passport_registration_no,
         totalShares: body.total_shares,
-        isVerified: true,
+        isVerified: body.is_verified ?? false,
       },
     });
 
@@ -326,13 +330,20 @@ vendorsRouter.put(
   "/:id/shareholders/:shareholderId",
   asyncHandler(async (req, res) => {
     const body = shareholderSchema.partial().parse(req.body);
+    // Editing the actual content of an already-verified row must reopen it for
+    // review — unless the same request explicitly re-confirms it.
+    const touchesContent =
+      body.name !== undefined ||
+      body.ic_passport_registration_no !== undefined ||
+      body.total_shares !== undefined;
+    const isVerified = touchesContent && body.is_verified !== true ? false : body.is_verified;
     const result = await prisma.ssmShareholder.updateMany({
       where: { id: req.params.shareholderId, vendorId: req.params.id },
       data: {
         name: body.name,
         icPassportRegistrationNo: body.ic_passport_registration_no,
         totalShares: body.total_shares,
-        isVerified: body.is_verified,
+        isVerified,
       },
     });
     if (result.count === 0) throw new NotFoundError("Shareholder not found");
@@ -583,20 +594,20 @@ vendorsRouter.post(
       relatedShareholderId: body.related_shareholder_id,
     });
 
+    // keyword_ids omitted entirely -> no library filter (every active keyword).
+    // keyword_ids explicitly [] -> the reviewer deliberately picked none from
+    // the library, so use none, not every keyword - only true omission falls
+    // back to "all".
     const activeKeywords = await prisma.adverseMediaKeywordLibrary.findMany({
       where: {
         isActive: true,
-        ...(body.keyword_ids && body.keyword_ids.length > 0
-          ? { id: { in: body.keyword_ids } }
-          : {}),
+        ...(body.keyword_ids !== undefined ? { id: { in: body.keyword_ids } } : {}),
       },
       select: { keyword: true },
     });
     const keywordTerms = [...activeKeywords.map((k) => k.keyword), ...(body.extra_keywords ?? [])];
     if (keywordTerms.length === 0) {
-      throw new ValidationError(
-        "No active keywords in the library and no extra_keywords provided"
-      );
+      throw new ValidationError("Select at least one keyword, or provide extra_keywords");
     }
 
     const queries = keywordTerms.map((term) => `"${subject.subjectName}" ${term}`);
@@ -655,51 +666,57 @@ vendorsRouter.post(
       },
     });
 
-    const categorized = await mapSettledWithConcurrency(
-      dedupedResults,
-      CATEGORIZATION_CONCURRENCY,
-      async (result) => {
-        const sourceDomain = result.source ?? extractDomain(result.link);
-        const category: CategorizationResult = await categorizeArticle({
-          subjectName: subject.subjectName,
-          title: result.title,
-          url: result.link,
-          sourceDomain,
-          snippet: result.snippet,
-        });
-        return { result, sourceDomain, category };
-      }
-    );
-
-    const articlesToCreate = categorized.flatMap((outcome, i) => {
-      if (outcome.status === "rejected") {
-        const reason =
-          outcome.reason instanceof CategorizationValidationError
-            ? outcome.reason.message
-            : outcome.reason;
-        console.error(
-          `Skipping adverse media article (categorization failed) for ${dedupedResults[i].link}:`,
-          reason
-        );
-        return [];
-      }
-      const { result, sourceDomain, category } = outcome.value;
-      return [
-        {
+    // Layer 1: persist every article link straight from the SERP results,
+    // before any AI call. This is the row that matters most to the reviewer
+    // (the source link) and must survive even if the AI step below is
+    // rate-limited or fails outright.
+    if (dedupedResults.length > 0) {
+      await prisma.adverseMediaArticle.createMany({
+        data: dedupedResults.map((result) => ({
           searchId: search.id,
           vendorId,
           articleTitle: result.title,
           articleUrl: result.link,
-          sourceDomain,
-          riskTheme: category.risk_theme,
-          aiSummary: category.ai_summary,
-        },
-      ];
-    });
-
-    if (articlesToCreate.length > 0) {
-      await prisma.adverseMediaArticle.createMany({ data: articlesToCreate });
+          sourceDomain: result.source ?? extractDomain(result.link),
+          categorizationStatus: "pending",
+        })),
+      });
     }
+
+    const persistedArticles = await prisma.adverseMediaArticle.findMany({
+      where: { searchId: search.id },
+    });
+    const snippetByUrl = new Map(dedupedResults.map((r) => [r.link, r.snippet]));
+
+    // Layer 2: retrieve the just-persisted articles and generate the AI
+    // summary for each. A failure here (e.g. the AI provider is rate-limited)
+    // only marks that one article's categorization as 'failed' - the article
+    // itself, already saved above, is unaffected and still returned.
+    await mapWithConcurrency(persistedArticles, CATEGORIZATION_CONCURRENCY, async (article) => {
+      try {
+        const category: CategorizationResult = await categorizeArticle({
+          subjectName: subject.subjectName,
+          title: article.articleTitle,
+          url: article.articleUrl,
+          sourceDomain: article.sourceDomain,
+          snippet: snippetByUrl.get(article.articleUrl) ?? null,
+        });
+        await prisma.adverseMediaArticle.update({
+          where: { id: article.id },
+          data: {
+            riskTheme: category.risk_theme,
+            aiSummary: category.ai_summary,
+            categorizationStatus: "completed",
+          },
+        });
+      } catch (err) {
+        console.error(`AI summary generation failed for ${article.articleUrl}:`, err);
+        await prisma.adverseMediaArticle.update({
+          where: { id: article.id },
+          data: { categorizationStatus: "failed" },
+        });
+      }
+    });
 
     const fullSearch = await prisma.adverseMediaSearch.findUnique({
       where: { id: search.id },

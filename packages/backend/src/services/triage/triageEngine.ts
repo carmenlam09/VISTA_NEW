@@ -43,7 +43,10 @@ async function collectPendingFindings(vendorId: string): Promise<PendingFinding[
       },
     }),
     prisma.adverseMediaArticle.findMany({
-      where: { vendorId, reviewerDecision: "pending" },
+      // Only articles whose AI summary has actually generated - one still
+      // 'pending' or that failed categorization has nothing for the scorer
+      // to reason about yet and will be picked up on a later triage run.
+      where: { vendorId, reviewerDecision: "pending", categorizationStatus: "completed" },
       include: {
         search: {
           select: {
