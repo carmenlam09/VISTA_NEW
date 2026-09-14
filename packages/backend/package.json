@@ -33,6 +33,7 @@
     "serpapi": "^2.2.1",
     "shared-types": "*",
     "typescript": "^5.6.3",
+    "yauzl": "^3.4.0",
     "zod": "^4.6.2"
   },
   "devDependencies": {
