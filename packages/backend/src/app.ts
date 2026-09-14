@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 import cors from "cors";
 import express from "express";
 
@@ -37,6 +40,21 @@ export function createApp() {
   app.use("/api/kyv-reports", kyvReportsRouter);
   app.use("/api/report-templates", reportTemplatesRouter);
   app.use("/api/knowledge-repository", knowledgeRepositoryRouter);
+
+  // Serve the built frontend SPA from the same process in production, so one
+  // deployed service handles both the API and the UI - present only after
+  // `npm run build` has run; in local dev the frontend runs on its own Vite
+  // server instead, which proxies /api here, so this simply no-ops.
+  const frontendDist = path.join(__dirname, "../../frontend/dist");
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    // Anything that isn't an API route is a client-side SPA route - hand it
+    // index.html and let React Router take over. Unmatched /api/* paths fall
+    // through to Express's default 404 instead, same as today.
+    app.get(/^(?!\/api\/).*/, (_req, res) => {
+      res.sendFile(path.join(frontendDist, "index.html"));
+    });
+  }
 
   app.use(errorHandler);
 

@@ -27,5 +27,5 @@ export const MODULES: ModuleDefinition[] = [
   { slug: "adverse-media", label: "Adverse Media", moduleNumber: "3", implemented: true },
   { slug: "triage", label: "Triage", moduleNumber: "4", implemented: true },
   { slug: "kyv-report", label: "KYV Report", moduleNumber: "5", implemented: true },
-  { slug: "knowledge-repository", label: "Knowledge Repository", moduleNumber: "6/7", implemented: true },
+  { slug: "knowledge-repository", label: "Knowledge Repository", moduleNumber: "6", implemented: true },
 ];
