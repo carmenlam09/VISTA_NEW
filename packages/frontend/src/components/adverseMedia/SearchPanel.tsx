@@ -91,6 +91,16 @@ export function SearchPanel({ vendorId }: { vendorId: string }) {
         {runSearch.isError && (
           <p className="text-xs text-destructive">{runSearch.error.message}</p>
         )}
+        {runSearch.isSuccess && (
+          <p className="text-xs text-muted-foreground">
+            Found {runSearch.data.articles?.length ?? 0} new article
+            {runSearch.data.articles?.length === 1 ? "" : "s"}
+            {runSearch.data.duplicatesSkipped
+              ? ` - skipped ${runSearch.data.duplicatesSkipped} already saved for this vendor`
+              : ""}
+            .
+          </p>
+        )}
 
         <div className="flex items-center justify-end gap-2">
           {subject && !canSearch && (

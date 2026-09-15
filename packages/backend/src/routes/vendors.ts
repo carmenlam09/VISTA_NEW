@@ -653,6 +653,23 @@ vendorsRouter.post(
       }
     }
 
+    // Also drop anything this vendor already has saved from an earlier
+    // search - overlapping keywords (or the same keyword run again) often
+    // resurface the same article. Checked before the AI summary step so a
+    // known-duplicate URL never burns another categorization call.
+    const existingUrls = await prisma.adverseMediaArticle.findMany({
+      where: { vendorId, articleUrl: { in: dedupedResults.map((r) => r.link) } },
+      select: { articleUrl: true },
+    });
+    const existingUrlSet = new Set(existingUrls.map((a) => a.articleUrl));
+    const newResults = dedupedResults.filter((r) => !existingUrlSet.has(r.link));
+    const duplicatesSkipped = dedupedResults.length - newResults.length;
+    if (duplicatesSkipped > 0) {
+      console.log(
+        `Skipped ${duplicatesSkipped} article(s) already saved for vendor ${vendorId}`
+      );
+    }
+
     const search = await prisma.adverseMediaSearch.create({
       data: {
         vendorId,
@@ -670,9 +687,9 @@ vendorsRouter.post(
     // before any AI call. This is the row that matters most to the reviewer
     // (the source link) and must survive even if the AI step below is
     // rate-limited or fails outright.
-    if (dedupedResults.length > 0) {
+    if (newResults.length > 0) {
       await prisma.adverseMediaArticle.createMany({
-        data: dedupedResults.map((result) => ({
+        data: newResults.map((result) => ({
           searchId: search.id,
           vendorId,
           articleTitle: result.title,
@@ -686,7 +703,7 @@ vendorsRouter.post(
     const persistedArticles = await prisma.adverseMediaArticle.findMany({
       where: { searchId: search.id },
     });
-    const snippetByUrl = new Map(dedupedResults.map((r) => [r.link, r.snippet]));
+    const snippetByUrl = new Map(newResults.map((r) => [r.link, r.snippet]));
 
     // Layer 2: retrieve the just-persisted articles and generate the AI
     // summary for each. A failure here (e.g. the AI provider is rate-limited)
@@ -723,7 +740,7 @@ vendorsRouter.post(
       include: { articles: true },
     });
 
-    res.status(201).json(fullSearch);
+    res.status(201).json({ ...fullSearch, duplicatesSkipped });
   })
 );
 

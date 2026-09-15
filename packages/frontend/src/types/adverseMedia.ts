@@ -44,6 +44,10 @@ export interface AdverseMediaSearchRun {
   searchedAt: string;
   _count?: { articles: number };
   articles?: AdverseMediaArticle[];
+  // Present only on the response from POST /adverse-media-searches - articles
+  // whose URL this vendor already had saved from an earlier search, so they
+  // were skipped rather than re-saved and re-summarized.
+  duplicatesSkipped?: number;
 }
 
 export type ReviewerDecision = "pending" | "relevant" | "false_positive";
