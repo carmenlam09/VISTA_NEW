@@ -41,13 +41,22 @@ export interface ShareholderInput {
   is_verified?: boolean;
 }
 
+// Adding or removing a vendor changes every dashboard aggregate, not just the
+// list - without these the KPIs, risk panel and network would go stale.
+const PORTFOLIO_QUERY_KEYS = [
+  ["vendors"],
+  ["dashboard-overview"],
+  ["dashboard-stats"],
+  ["dashboard-network"],
+];
+
 export function useCreateVendor() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (companyName: string) =>
       apiPost<VendorSummary>("/api/vendors", { company_name: companyName }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vendors"] });
+      for (const queryKey of PORTFOLIO_QUERY_KEYS) queryClient.invalidateQueries({ queryKey });
     },
   });
 }
@@ -57,7 +66,7 @@ export function useDeleteVendor() {
   return useMutation({
     mutationFn: (vendorId: string) => apiDelete(`/api/vendors/${vendorId}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vendors"] });
+      for (const queryKey of PORTFOLIO_QUERY_KEYS) queryClient.invalidateQueries({ queryKey });
     },
   });
 }
