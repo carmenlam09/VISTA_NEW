@@ -34,7 +34,7 @@ export function ArticleCard({
         isFalsePositive
           ? "border-border bg-muted/40 opacity-60"
           : isRelevant
-            ? "border-emerald-300 bg-emerald-50"
+            ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
             : "border-border"
       )}
     >

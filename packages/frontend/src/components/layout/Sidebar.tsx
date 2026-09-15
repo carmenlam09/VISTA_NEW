@@ -1,12 +1,10 @@
-import { PanelLeftClose, PanelLeftOpen, ShieldCheck } from "lucide-react";
+import { Moon, PanelLeftClose, PanelLeftOpen, ShieldCheck, Sun } from "lucide-react";
 import { useState } from "react";
 import { MODULES } from "shared-types";
 import { NavLink, useParams } from "react-router-dom";
 
+import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
-
-const itemClasses =
-  "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors";
 
 const COLLAPSED_STORAGE_KEY = "vista-sidebar-collapsed";
 
@@ -21,6 +19,7 @@ function getInitialCollapsed(): boolean {
 export function Sidebar() {
   const { vendorId } = useParams<{ vendorId: string }>();
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  const { theme, toggleTheme } = useTheme();
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -37,37 +36,67 @@ export function Sidebar() {
   return (
     <nav
       className={cn(
-        "flex h-full shrink-0 flex-col border-r border-border bg-secondary/30 transition-[width] duration-200",
+        // One continuous charcoal column for the full viewport height - the
+        // brand lockup sits on the same ground as the nav rather than in a
+        // separate coloured header block, which reads as a single piece of
+        // app chrome instead of two stacked bars.
+        "flex h-full shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200",
         collapsed ? "w-16" : "w-64"
       )}
     >
-      <div className={cn("flex gap-3 px-3 py-5", collapsed ? "flex-col items-center" : "items-center")}>
+      {/* Brand masthead. The bank's name is no longer spelled out here, so
+          the OCBC identity is carried entirely by colour: a red wash behind
+          the lockup, the red shield tile, and the red rule closing the
+          block off from the navigation. */}
+      <div className="relative">
         <div
           aria-hidden="true"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm shadow-indigo-500/30"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/30 via-brand/[0.07] to-transparent"
+        />
+
+        <div
+          className={cn(
+            "relative flex gap-3",
+            collapsed ? "flex-col items-center px-2 py-4" : "items-center px-4 py-5"
+          )}
         >
-          <ShieldCheck size={20} strokeWidth={2.25} />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <div className="text-2xl font-extrabold tracking-tight text-foreground">VISTA</div>
-            <div className="text-[10px] font-medium leading-tight text-muted-foreground">
-              Vendor Intelligence Screening &amp; Trust Assessment
+          <div
+            aria-hidden="true"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground shadow-lg shadow-brand/40 ring-1 ring-white/20"
+          >
+            <ShieldCheck size={20} strokeWidth={2.25} />
+          </div>
+          {!collapsed && (
+            <div className="min-w-0 flex-1 text-2xl font-extrabold leading-none tracking-tight text-white">
+              VISTA
             </div>
+          )}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-muted transition-colors hover:bg-sidebar-raised hover:text-white"
+          >
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        </div>
+
+        {!collapsed && (
+          <div className="relative px-4 pb-4 text-[10px] font-medium leading-snug text-sidebar-muted">
+            Vendor Intelligence Screening &amp; Trust Assessment
           </div>
         )}
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
+
+        {/* Brand rule closing the masthead - solid at the leading edge and
+            fading out, so it frames the lockup without boxing it in. */}
+        <div
+          aria-hidden="true"
+          className="h-0.5 bg-gradient-to-r from-brand via-brand/60 to-brand/10"
+        />
       </div>
 
-      <div className="flex-1 space-y-1 px-2">
+      <div className="flex-1 space-y-0.5 px-2 pt-3">
         {MODULES.map((module) => {
           // Unlike every other module, the Knowledge Repository searches
           // across all vendors - it's never vendor-scoped, so it's always
@@ -80,14 +109,22 @@ export function Sidebar() {
                 : null;
 
           const label = collapsed ? (
-            <span className="mx-auto text-[10px] font-semibold opacity-70">
-              M{module.moduleNumber}
-            </span>
+            <span className="mx-auto text-[10px] font-semibold">M{module.moduleNumber}</span>
           ) : (
             <>
-              <span>{module.label}</span>
-              <span className="text-[10px] font-normal opacity-60">M{module.moduleNumber}</span>
+              <span className="truncate">{module.label}</span>
+              <span className="ml-2 shrink-0 text-[10px] font-normal opacity-50">
+                M{module.moduleNumber}
+              </span>
             </>
+          );
+
+          // The active marker is a 4px brand-red rule on the leading edge.
+          // It's painted as a transparent border on every item (not added
+          // only when active) so the label never shifts by 4px on select.
+          const base = cn(
+            "flex items-center justify-between rounded-r-md border-l-4 py-2 text-sm font-medium transition-colors",
+            collapsed ? "justify-center px-1" : "pl-3 pr-3"
           );
 
           return to ? (
@@ -97,11 +134,10 @@ export function Sidebar() {
               title={collapsed ? module.label : undefined}
               className={({ isActive }) =>
                 cn(
-                  itemClasses,
-                  collapsed && "justify-center px-2",
+                  base,
                   isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-foreground/80 hover:bg-accent hover:text-accent-foreground"
+                    ? "border-l-brand bg-brand/[0.12] font-semibold text-white"
+                    : "border-l-transparent text-sidebar-foreground/90 hover:bg-sidebar-raised hover:text-white"
                 )
               }
               end
@@ -111,12 +147,8 @@ export function Sidebar() {
           ) : (
             <div
               key={module.slug}
-              title={collapsed ? module.label : undefined}
-              className={cn(
-                itemClasses,
-                collapsed && "justify-center px-2",
-                "pointer-events-none text-foreground/40"
-              )}
+              title={collapsed ? module.label : "Select a vendor to open this module"}
+              className={cn(base, "pointer-events-none border-l-transparent text-sidebar-muted/50")}
             >
               {label}
             </div>
@@ -124,16 +156,20 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
-        {collapsed ? (
-          <span className="block text-center" title="Logged in as Default Reviewer">
-            DR
-          </span>
-        ) : (
-          <>
-            Logged in as <span className="font-medium text-foreground">Default Reviewer</span>
-          </>
-        )}
+      <div className="border-t border-brand/25 px-2 py-3">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-sidebar-muted transition-colors hover:bg-sidebar-raised hover:text-white",
+            collapsed ? "mx-auto justify-center px-1.5" : "w-full"
+          )}
+        >
+          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+          {!collapsed && (theme === "dark" ? "Light mode" : "Dark mode")}
+        </button>
       </div>
     </nav>
   );

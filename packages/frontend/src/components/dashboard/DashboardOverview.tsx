@@ -20,32 +20,28 @@ export function DashboardOverview() {
         icon={Building2}
         label="Total Vendors"
         value={stats.vendors.total}
-        gradient="from-indigo-500 to-blue-600"
-        wash="bg-indigo-50/50"
+        tone="brand"
       />
       <StatCard
         icon={ShieldCheck}
         label="Vendors Screened"
         value={stats.vendors.screened}
         detail={`of ${stats.vendors.total} vendor${stats.vendors.total === 1 ? "" : "s"} onboarded`}
-        gradient="from-cyan-500 to-teal-600"
-        wash="bg-cyan-50/50"
+        tone="info"
       />
       <StatCard
         icon={AlertTriangle}
         label="Pending Triage Review"
         value={stats.triage.byDecision.pending}
         detail={`${stats.triage.byDecision.relevant} flagged relevant so far`}
-        gradient="from-amber-500 to-orange-600"
-        wash="bg-amber-50/50"
+        tone="warning"
       />
       <StatCard
         icon={FileCheck2}
         label="KYV Reports Approved"
         value={stats.kyvReports.byStatus.approved}
         detail={`${stats.kyvReports.total} report${stats.kyvReports.total === 1 ? "" : "s"} generated overall`}
-        gradient="from-emerald-500 to-green-600"
-        wash="bg-emerald-50/50"
+        tone="success"
       />
     </div>
   );

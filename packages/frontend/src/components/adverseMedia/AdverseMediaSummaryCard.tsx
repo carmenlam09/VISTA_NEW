@@ -44,7 +44,7 @@ export function AdverseMediaSummaryCard({ vendorId }: { vendorId: string }) {
       ) : (
         <>
           {hasHighSensitivityPending && (
-            <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-800">
+            <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-800 dark:bg-red-950/40 dark:text-red-300">
               ⚠ Unresolved sanctions/financial crime finding awaiting review
             </div>
           )}

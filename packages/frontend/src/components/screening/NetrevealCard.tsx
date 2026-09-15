@@ -95,7 +95,7 @@ export function NetrevealCard({
       </div>
 
       {hasWatchHit && (
-        <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-800">
+        <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-800 dark:bg-red-950/40 dark:text-red-300">
           ⚠ Watchlist details found for this subject — review carefully before proceeding.
         </div>
       )}

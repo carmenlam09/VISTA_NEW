@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { DashboardOverview } from "@/components/dashboard/DashboardOverview";
+import { NetworkGraph } from "@/components/dashboard/NetworkGraph";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,11 +43,10 @@ export function VendorListPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8">
       <div>
-        <h1 className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
-          Dashboard
-        </h1>
+        <div className="mb-2 h-1 w-12 rounded-full bg-brand" />
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Dashboard</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           An overview of vendor risk screening activity across VISTA.
         </p>
@@ -54,8 +54,19 @@ export function VendorListPage() {
 
       <DashboardOverview />
 
+      <div className="border-t border-border pt-6">
+        <div aria-hidden="true" className="mb-2 h-1 w-8 rounded-full bg-brand" />
+        <h2 className="text-base font-semibold">Vendor Network</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          How companies, directors, and shareholders connect across your portfolio. Drag nodes to
+          rearrange, click one to see its details.
+        </p>
+        <NetworkGraph />
+      </div>
+
       <div className="flex items-center justify-between border-t border-border pt-6">
         <div>
+          <div aria-hidden="true" className="mb-2 h-1 w-8 rounded-full bg-brand" />
           <h2 className="text-base font-semibold">Vendors</h2>
           <p className="text-sm text-muted-foreground">
             Select a vendor to continue their KYV review, or start a new intake.
@@ -91,9 +102,9 @@ export function VendorListPage() {
         <p className="text-xs text-destructive">{deleteVendor.error.message}</p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-border">
+      <div className="card-elevated overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-secondary/60 text-muted-foreground">
+          <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Company Name</th>
               <th className="px-4 py-3 font-medium">Registration No.</th>
@@ -127,12 +138,12 @@ export function VendorListPage() {
             {vendors?.map((vendor) => (
               <tr
                 key={vendor.id}
-                className="border-b border-border transition-colors last:border-0 hover:bg-accent/40"
+                className="border-b border-border transition-colors last:border-0 hover:bg-brand/[0.08]"
               >
                 <td className="px-4 py-3 font-medium">{vendor.companyName}</td>
-                <td className="px-4 py-3">{vendor.registrationNo ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{vendor.registrationNo ?? "—"}</td>
                 <td className="px-4 py-3">
-                  <Badge variant={(STATUS_BADGE[vendor.status] ?? STATUS_BADGE.draft).variant}>
+                  <Badge dot variant={(STATUS_BADGE[vendor.status] ?? STATUS_BADGE.draft).variant}>
                     {(STATUS_BADGE[vendor.status] ?? STATUS_BADGE.draft).label}
                   </Badge>
                 </td>

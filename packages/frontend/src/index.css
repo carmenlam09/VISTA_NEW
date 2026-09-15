@@ -4,33 +4,120 @@
 
 @layer base {
   :root {
+    /* ---- OCBC brand -------------------------------------------------
+       #ED1A2D, the official OCBC red. Held as a fixed token (identical in
+       both themes) because a brand colour must not drift with the UI
+       theme - it is the one thing on screen that has to be exactly right.
+       Everything that should read as "OCBC" points here rather than at
+       --primary, so the brand stays anchored even if product colours are
+       retuned later. The fractional values are not fussiness - they
+       round-trip to #ED1A2D exactly, where a tidier "354 85% 52%" lands on
+       #ED1D31. */
+    --brand: 354.6 85.4% 51.6%;
+    --brand-foreground: 0 0% 100%;
+
     --background: 0 0% 100%;
     --foreground: 224 39% 12%;
 
-    /* Brand: indigo/violet - trust + security + modern fintech, replacing
-       the previous flat near-black navy. Semantic colors (success/warning/
-       destructive badges) are intentionally untouched Tailwind utilities
-       elsewhere, so only the brand identity shifts here. */
-    --primary: 243 75% 59%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary (CTAs, active states, focus rings) tracks the brand. */
+    --primary: 354.6 85.4% 51.6%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 25% 97%;
-    --secondary-foreground: 243 47% 20%;
+    --secondary: 210 20% 97%;
+    --secondary-foreground: 215 25% 27%;
 
-    --muted: 240 20% 96%;
-    --muted-foreground: 220 9% 46%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 240 100% 97%;
-    --accent-foreground: 243 60% 25%;
+    --accent: 354 85% 97%;
+    --accent-foreground: 354 70% 32%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Kept a distinct, more orange-leaning red from --brand so a
+       destructive action never looks like a branded one. */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 240 20% 91%;
-    --input: 240 20% 91%;
-    --ring: 243 75% 59%;
+    /* Status semantics. Deliberately NOT red-family (except danger) so a
+       risk rating is legible independently of the brand colour.
+       --success is #00875A. */
+    --success: 160 100% 26%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 95% 44%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 20% 91%;
+    --input: 214 20% 91%;
+    --ring: 354.6 85.4% 51.6%;
+
+    /* ---- Sidebar ----------------------------------------------------
+       The sidebar is a fixed dark charcoal in BOTH themes - it reads as
+       application chrome rather than content, which is the convention in
+       enterprise consoles and keeps the brand lockup on a stable ground.
+       It therefore has its own token scale instead of using --background. */
+    --sidebar: 215 19% 13%;
+    --sidebar-raised: 215 17% 17%;
+    --sidebar-foreground: 214 32% 91%;
+    --sidebar-muted: 215 14% 57%;
+    --sidebar-border: 215 15% 22%;
+
+    /* ---- Network graph canvas --------------------------------------- */
+    --graph-canvas: 210 40% 98%;
+    --graph-dot: 214 32% 91%;
+    --graph-link: 214 20% 82%;
+
+    /* Card elevation, themed so the dark UI gets depth from a darker,
+       tighter shadow rather than an invisible black-on-black one. */
+    --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    --card-shadow-hover: 0 10px 28px rgba(0, 0, 0, 0.08);
+    --card-border: 0 0% 0% / 0.06;
 
     --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 24% 9%;
+    --foreground: 210 20% 96%;
+
+    /* Lifted slightly against the dark ground so the brand red keeps its
+       contrast ratio on near-black; the hue is unchanged. */
+    --primary: 354 88% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 19% 16%;
+    --secondary-foreground: 210 20% 92%;
+
+    --muted: 217 19% 16%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 354 40% 22%;
+    --accent-foreground: 354 90% 92%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 65% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 90% 55%;
+    --warning-foreground: 224 39% 12%;
+
+    --border: 217 17% 22%;
+    --input: 217 17% 22%;
+    --ring: 354 88% 60%;
+
+    /* Sidebar goes a touch darker than the page so it still separates. */
+    --sidebar: 220 22% 8%;
+    --sidebar-raised: 217 19% 14%;
+    --sidebar-foreground: 210 20% 94%;
+    --sidebar-muted: 215 16% 60%;
+    --sidebar-border: 217 17% 19%;
+
+    --graph-canvas: 220 22% 11%;
+    --graph-dot: 217 15% 22%;
+    --graph-link: 217 15% 30%;
+
+    --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --card-shadow-hover: 0 10px 28px rgba(0, 0, 0, 0.55);
+    --card-border: 0 0% 100% / 0.08;
   }
 }
 
@@ -40,5 +127,45 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Shared surface for KPI cards and the network inspector, so elevation
+     and hover behaviour stay identical between them. */
+  .card-elevated {
+    border: 1px solid hsl(var(--card-border));
+    border-radius: 12px;
+    background-color: hsl(var(--background));
+    box-shadow: var(--card-shadow);
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--card-shadow-hover);
+    border-color: hsl(var(--brand) / 0.3);
+  }
+
+  /* Respect users who have asked the OS to reduce motion - the lift is
+     decorative, the shadow/border change still conveys hover. */
+  @media (prefers-reduced-motion: reduce) {
+    .card-elevated {
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .card-interactive:hover {
+      transform: none;
+    }
+  }
+
+  /* Dot-matrix blueprint ground for the relationship graph. */
+  .graph-canvas {
+    background-color: hsl(var(--graph-canvas));
+    background-image: radial-gradient(circle, hsl(var(--graph-dot)) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: -9px -9px;
   }
 }

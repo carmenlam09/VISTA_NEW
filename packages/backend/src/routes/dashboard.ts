@@ -84,3 +84,127 @@ dashboardRouter.get(
     });
   })
 );
+
+// Cross-vendor relationship graph for the dashboard's network visualization
+// (VISTA_module1_system_prompt.md's captured directors/shareholders are the
+// only real relationship data we have - no UBO/bank data exists anywhere in
+// the schema, so this deliberately only surfaces Company/Director/Shareholder
+// nodes rather than fabricating entity types the app doesn't actually track).
+//
+// A person is the same node across vendors when they share a usable
+// IC/passport number - SSM reports sometimes redact these as literal masked
+// placeholders (e.g. "XXXXXX-10-XXXX"), which are identical across genuinely
+// different people, so a masked value is never used as a match key. With no
+// usable ID on either side, records fall back to matching by exact
+// normalized name - a heuristic surfaced to the reviewer to verify, not an
+// assertion of fact, same spirit as every other AI-suggested finding in
+// this app.
+function normalizeIc(ic: string | null): string | null {
+  if (!ic) return null;
+  const trimmed = ic.trim();
+  if (!trimmed || /x/i.test(trimmed)) return null;
+  return trimmed.toUpperCase();
+}
+
+function personMatchKey(name: string, ic: string | null): string {
+  const usableIc = normalizeIc(ic);
+  return usableIc ? `ic:${usableIc}` : `name:${name.trim().toUpperCase()}`;
+}
+
+interface PersonRole {
+  vendorId: string;
+  vendorName: string;
+  role: "director" | "shareholder";
+  designation: string | null;
+  totalShares: string | null;
+}
+
+dashboardRouter.get(
+  "/network",
+  asyncHandler(async (_req, res) => {
+    const vendors = await prisma.vendor.findMany({
+      select: {
+        id: true,
+        companyName: true,
+        registrationNo: true,
+        status: true,
+        directors: { select: { id: true, name: true, icPassportNo: true, designation: true } },
+        shareholders: {
+          select: { id: true, name: true, icPassportRegistrationNo: true, totalShares: true },
+        },
+      },
+    });
+
+    const companyNodes = vendors.map((v) => ({
+      id: `vendor:${v.id}`,
+      kind: "company" as const,
+      label: v.companyName,
+      vendorId: v.id,
+      registrationNo: v.registrationNo,
+      status: v.status,
+    }));
+
+    const personByKey = new Map<
+      string,
+      { id: string; name: string; icPassportNo: string | null; roles: PersonRole[] }
+    >();
+    const edgeSet = new Set<string>();
+    const edges: { source: string; target: string }[] = [];
+
+    function addPersonRole(
+      vendorId: string,
+      vendorName: string,
+      name: string,
+      ic: string | null,
+      role: PersonRole["role"],
+      designation: string | null,
+      totalShares: string | null
+    ) {
+      const key = personMatchKey(name, ic);
+      let person = personByKey.get(key);
+      if (!person) {
+        person = { id: `person:${key}`, name, icPassportNo: normalizeIc(ic), roles: [] };
+        personByKey.set(key, person);
+      }
+      person.roles.push({ vendorId, vendorName, role, designation, totalShares });
+
+      const edgeKey = `vendor:${vendorId}|${person.id}`;
+      if (!edgeSet.has(edgeKey)) {
+        edgeSet.add(edgeKey);
+        edges.push({ source: `vendor:${vendorId}`, target: person.id });
+      }
+    }
+
+    for (const v of vendors) {
+      for (const d of v.directors) {
+        addPersonRole(v.id, v.companyName, d.name, d.icPassportNo, "director", d.designation, null);
+      }
+      for (const s of v.shareholders) {
+        addPersonRole(
+          v.id,
+          v.companyName,
+          s.name,
+          s.icPassportRegistrationNo,
+          "shareholder",
+          null,
+          s.totalShares?.toString() ?? null
+        );
+      }
+    }
+
+    const personNodes = Array.from(personByKey.values()).map((p) => ({
+      id: p.id,
+      // A person holding a director role anywhere is colored as a director -
+      // that's the more compliance-relevant role when someone holds both.
+      kind: (p.roles.some((r) => r.role === "director") ? "director" : "shareholder") as
+        | "director"
+        | "shareholder",
+      label: p.name,
+      icPassportNo: p.icPassportNo,
+      roles: p.roles,
+      linkedCompanyCount: new Set(p.roles.map((r) => r.vendorId)).size,
+    }));
+
+    res.json({ nodes: [...companyNodes, ...personNodes], edges });
+  })
+);

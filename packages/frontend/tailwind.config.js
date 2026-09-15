@@ -1,34 +1,64 @@
 /** @type {import('tailwindcss').Config} */
+
+// Every token is declared with the `<alpha-value>` placeholder so opacity
+// modifiers (bg-brand/10, border-brand/30, ...) resolve against the CSS
+// variable instead of being silently dropped.
+const token = (name) => `hsl(var(--${name}) / <alpha-value>)`;
+
 export default {
   darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        border: token("border"),
+        input: token("input"),
+        ring: token("ring"),
+        background: token("background"),
+        foreground: token("foreground"),
+        brand: {
+          DEFAULT: token("brand"),
+          foreground: token("brand-foreground"),
+        },
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: token("primary"),
+          foreground: token("primary-foreground"),
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: token("secondary"),
+          foreground: token("secondary-foreground"),
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: token("muted"),
+          foreground: token("muted-foreground"),
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: token("accent"),
+          foreground: token("accent-foreground"),
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: token("destructive"),
+          foreground: token("destructive-foreground"),
+        },
+        success: {
+          DEFAULT: token("success"),
+          foreground: token("success-foreground"),
+        },
+        warning: {
+          DEFAULT: token("warning"),
+          foreground: token("warning-foreground"),
+        },
+        sidebar: {
+          DEFAULT: token("sidebar"),
+          raised: token("sidebar-raised"),
+          foreground: token("sidebar-foreground"),
+          muted: token("sidebar-muted"),
+          border: token("sidebar-border"),
+        },
+        graph: {
+          canvas: token("graph-canvas"),
+          dot: token("graph-dot"),
+          link: token("graph-link"),
         },
       },
       borderRadius: {

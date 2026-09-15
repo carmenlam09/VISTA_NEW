@@ -4,19 +4,25 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+// Filled buttons go flat grey when disabled rather than a faded tint: at 50%
+// opacity the brand red reads as a washed-out pink that still looks pressable,
+// which matters here because "Confirm & Save" uses the disabled state to mean
+// "already saved, nothing to do" - that has to be unmistakably inert.
+const DISABLED_FILL =
+  "disabled:bg-muted disabled:text-muted-foreground/70 disabled:shadow-none";
+
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+        default: `bg-primary text-primary-foreground shadow hover:bg-primary/90 ${DISABLED_FILL}`,
+        destructive: `bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 ${DISABLED_FILL}`,
         outline:
-          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
+        ghost: "hover:bg-accent hover:text-accent-foreground disabled:opacity-50",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+          `bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 ${DISABLED_FILL}`,
       },
       size: {
         default: "h-9 px-4 py-2",
