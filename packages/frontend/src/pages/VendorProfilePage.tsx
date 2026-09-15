@@ -7,6 +7,7 @@ import { ScreeningSummaryCard } from "@/components/screening/ScreeningSummaryCar
 import { TriageSummaryCard } from "@/components/triage/TriageSummaryCard";
 import { Badge } from "@/components/ui/badge";
 import { useVendor } from "@/hooks/useVendor";
+import { formatNumber } from "@/lib/utils";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -90,7 +91,9 @@ export function VendorProfilePage() {
           {vendor.shareCapital?.isVerified && <Badge variant="success">Verified</Badge>}
         </div>
         {vendor.shareCapital ? (
-          <p className="text-sm">Paid Up Capital: {vendor.shareCapital.paidUpCapital ?? "—"}</p>
+          <p className="text-sm">
+            Paid Up Capital: {formatNumber(vendor.shareCapital.paidUpCapital)}
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">Not yet captured.</p>
         )}
@@ -138,7 +141,7 @@ export function VendorProfilePage() {
                 <tr key={s.id} className="border-t border-border">
                   <td className="py-1 pr-2">{s.icPassportRegistrationNo ?? "—"}</td>
                   <td className="py-1 pr-2">{s.name}</td>
-                  <td className="py-1">{s.totalShares ?? "—"}</td>
+                  <td className="py-1">{formatNumber(s.totalShares)}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { useScreening } from "@/hooks/useScreening";
+import { formatNumber } from "@/lib/utils";
 
 function Stat({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -42,8 +43,8 @@ export function ScreeningSummaryCard({ vendorId }: { vendorId: string }) {
           </p>
 
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Revenue" value={financialHighlights?.revenueTurnover} />
-            <Stat label="Net Income" value={financialHighlights?.netIncome} />
+            <Stat label="Revenue" value={formatNumber(financialHighlights?.revenueTurnover)} />
+            <Stat label="Net Income" value={formatNumber(financialHighlights?.netIncome)} />
             <Stat label="Current Ratio" value={financialHighlights?.currentRatio} />
             <Stat label="Debt-to-Equity" value={financialHighlights?.debtToEquityRatio} />
           </div>
