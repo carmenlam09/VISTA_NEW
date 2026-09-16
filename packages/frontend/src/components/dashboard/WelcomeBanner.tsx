@@ -38,7 +38,7 @@ export function WelcomeBanner({ userName }: { userName: string }) {
       <div>
         <div className="mb-2 h-1 w-12 rounded-full bg-brand" />
         <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
-          {greeting(new Date())}, <span className="text-brand">{userName}</span>
+          {greeting(new Date())}, <span className="text-foreground">{userName}</span>
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Here&apos;s what&apos;s happening with your vendor risk landscape today.

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { SubjectBadge } from "@/components/screening/SubjectBadge";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { formatDate } from "@/lib/utils";
 import { RISK_THEME_LABELS } from "@/types/adverseMedia";
 import type { KnowledgeDecision, KnowledgeRepositoryResult, KnowledgeSourceType } from "@/types/knowledgeRepository";
 
@@ -51,7 +52,7 @@ export function KnowledgeRepositoryResultCard({ result }: { result: KnowledgeRep
       <p className="text-sm text-muted-foreground">{stripMarkdownEmphasis(result.summaryText)}</p>
 
       <div className="mt-2 text-xs text-muted-foreground">
-        Indexed {new Date(result.indexedAt).toLocaleDateString()}
+        Indexed {formatDate(result.indexedAt)}
       </div>
     </div>
   );

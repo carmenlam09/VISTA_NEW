@@ -32,9 +32,18 @@ function toForm(record: NetrevealRecord): NetrevealUpdateInput {
 export function NetrevealCard({
   vendorId,
   record,
+  onSaved,
 }: {
   vendorId: string;
   record: NetrevealRecord;
+  /**
+   * Only needed by callers holding their own one-off snapshot of `record`
+   * (the upload-review modal) rather than a live query (the Screening page,
+   * which already re-renders on its own once a save invalidates it) - the
+   * PUT below already returns the freshly-saved record, so this hands it
+   * back up rather than making the caller refetch.
+   */
+  onSaved?: (record: NetrevealRecord) => void;
 }) {
   const [form, setForm] = useState<NetrevealUpdateInput>(() => toForm(record));
   const [savedForm, setSavedForm] = useState<NetrevealUpdateInput>(() => toForm(record));
@@ -69,7 +78,12 @@ export function NetrevealCard({
   function save() {
     updateNetreveal.mutate(
       { recordId: record.id, input: form },
-      { onSuccess: () => setSavedForm(form) }
+      {
+        onSuccess: (saved) => {
+          setSavedForm(form);
+          onSaved?.(saved);
+        },
+      }
     );
   }
 

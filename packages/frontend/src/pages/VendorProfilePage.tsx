@@ -7,12 +7,7 @@ import { ScreeningSummaryCard } from "@/components/screening/ScreeningSummaryCar
 import { TriageSummaryCard } from "@/components/triage/TriageSummaryCard";
 import { Badge } from "@/components/ui/badge";
 import { useVendor } from "@/hooks/useVendor";
-import { formatNumber } from "@/lib/utils";
-
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString();
-}
+import { formatCalendarDate, formatNumber } from "@/lib/utils";
 
 export function VendorProfilePage() {
   const { vendorId } = useParams<{ vendorId: string }>();
@@ -69,7 +64,7 @@ export function VendorProfilePage() {
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Date of Incorporation</dt>
-              <dd>{formatDate(vendor.corporateInfo.dateOfIncorporation)}</dd>
+              <dd>{formatCalendarDate(vendor.corporateInfo.dateOfIncorporation)}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Company Status</dt>

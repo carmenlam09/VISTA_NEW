@@ -13,7 +13,12 @@ import {
 import { generateKyvReport } from "../services/kyvReport/reportGenerator";
 import { SummaryGenerationError, generateScreeningSummary } from "../services/screeningSummary";
 import { SerpSearchError, type SerpOrganicResult, searchGoogle } from "../services/search/serpClient";
-import { SUBJECT_TYPES, resolveSubject } from "../services/subjects";
+import {
+  SUBJECT_TYPES,
+  resolveSubject,
+  type ResolvedSubject,
+  type SubjectType,
+} from "../services/subjects";
 import { getCurrentUserId } from "../services/currentUser";
 import { SOURCE_TYPES, runTriageForVendor } from "../services/triage/triageEngine";
 
@@ -569,8 +574,17 @@ function extractDomain(url: string): string | null {
 const SERP_SEARCH_CONCURRENCY = Number(process.env.SERP_SEARCH_CONCURRENCY ?? 3);
 const CATEGORIZATION_CONCURRENCY = Number(process.env.CATEGORIZATION_CONCURRENCY ?? 3);
 
+// Upper bound on SERP calls for one run, since "all" multiplies the number of
+// subjects by the number of keywords. Env-tunable for accounts with a larger
+// quota.
+const MAX_QUERIES_PER_RUN = Number(process.env.MAX_QUERIES_PER_RUN ?? 120);
+
+// Adverse media can additionally target every related party at once; the
+// screening modules (CTOS/NetReveal) still take exactly one subject.
+const ADVERSE_MEDIA_SUBJECT_TYPES = [...SUBJECT_TYPES, "all"] as const;
+
 const runAdverseMediaSearchSchema = z.object({
-  subject_type: z.enum(SUBJECT_TYPES),
+  subject_type: z.enum(ADVERSE_MEDIA_SUBJECT_TYPES),
   related_director_id: z.string().uuid().nullable().optional(),
   related_shareholder_id: z.string().uuid().nullable().optional(),
   extra_keywords: z.array(z.string().min(1)).optional(),
@@ -588,11 +602,6 @@ vendorsRouter.post(
     if (!vendor) throw new NotFoundError("Vendor not found");
 
     const body = runAdverseMediaSearchSchema.parse(req.body);
-    const subject = await resolveSubject(vendorId, {
-      subjectType: body.subject_type,
-      relatedDirectorId: body.related_director_id,
-      relatedShareholderId: body.related_shareholder_id,
-    });
 
     // keyword_ids omitted entirely -> no library filter (every active keyword).
     // keyword_ids explicitly [] -> the reviewer deliberately picked none from
@@ -610,137 +619,248 @@ vendorsRouter.post(
       throw new ValidationError("Select at least one keyword, or provide extra_keywords");
     }
 
-    const queries = keywordTerms.map((term) => `"${subject.subjectName}" ${term}`);
-    const searchedById = await getCurrentUserId();
-
-    // Run every query, then de-duplicate results by URL across all of them
-    // before saving. Only a failure of the SERP call itself marks the search
-    // 'failed' - per-article AI categorization failures are handled below and
-    // never fail the whole run.
-    // Bounded concurrency, not Promise.all - firing every keyword's query at
-    // once tripped SerpApi's per-account concurrency limit once enough
-    // keywords were selected, surfacing as a client-side timeout.
-    let resultSets: SerpOrganicResult[][];
-    try {
-      resultSets = await mapWithConcurrency(queries, SERP_SEARCH_CONCURRENCY, (q) => searchGoogle(q));
-    } catch (err) {
-      const failedSearch = await prisma.adverseMediaSearch.create({
-        data: {
-          vendorId,
-          subjectType: body.subject_type,
-          subjectName: subject.subjectName,
-          relatedDirectorId: subject.relatedDirectorId,
-          relatedShareholderId: subject.relatedShareholderId,
-          keywordsUsed: queries,
-          searchStatus: "failed",
-          searchedById,
+    // Which subjects this run covers. "all" fans out over the company plus
+    // every director and shareholder captured in Module 1 - the related
+    // parties a reviewer would otherwise have to search one at a time.
+    const targets: { subjectType: SubjectType; subject: ResolvedSubject }[] = [];
+    if (body.subject_type === "all") {
+      const [directors, shareholders] = await Promise.all([
+        prisma.ssmDirector.findMany({ where: { vendorId }, select: { id: true, name: true } }),
+        prisma.ssmShareholder.findMany({ where: { vendorId }, select: { id: true, name: true } }),
+      ]);
+      targets.push({
+        subjectType: "company",
+        subject: {
+          subjectName: vendor.companyName,
+          relatedDirectorId: null,
+          relatedShareholderId: null,
         },
       });
-      if (err instanceof SerpSearchError) {
-        res.status(502).json({ error: err.message, search: failedSearch });
-        return;
+      for (const d of directors) {
+        targets.push({
+          subjectType: "director",
+          subject: { subjectName: d.name, relatedDirectorId: d.id, relatedShareholderId: null },
+        });
       }
-      throw err;
+      for (const s of shareholders) {
+        targets.push({
+          subjectType: "shareholder",
+          subject: { subjectName: s.name, relatedDirectorId: null, relatedShareholderId: s.id },
+        });
+      }
+    } else {
+      targets.push({
+        subjectType: body.subject_type,
+        subject: await resolveSubject(vendorId, {
+          subjectType: body.subject_type,
+          relatedDirectorId: body.related_director_id,
+          relatedShareholderId: body.related_shareholder_id,
+        }),
+      });
     }
 
-    const seenUrls = new Set<string>();
-    const dedupedResults: SerpOrganicResult[] = [];
-    for (const results of resultSets) {
-      for (const result of results) {
-        if (seenUrls.has(result.link)) continue;
-        seenUrls.add(result.link);
-        dedupedResults.push(result);
-      }
-    }
-
-    // Also drop anything this vendor already has saved from an earlier
-    // search - overlapping keywords (or the same keyword run again) often
-    // resurface the same article. Checked before the AI summary step so a
-    // known-duplicate URL never burns another categorization call.
-    const existingUrls = await prisma.adverseMediaArticle.findMany({
-      where: { vendorId, articleUrl: { in: dedupedResults.map((r) => r.link) } },
-      select: { articleUrl: true },
-    });
-    const existingUrlSet = new Set(existingUrls.map((a) => a.articleUrl));
-    const newResults = dedupedResults.filter((r) => !existingUrlSet.has(r.link));
-    const duplicatesSkipped = dedupedResults.length - newResults.length;
-    if (duplicatesSkipped > 0) {
-      console.log(
-        `Skipped ${duplicatesSkipped} article(s) already saved for vendor ${vendorId}`
+    // Every SERP query is a paid API call, and "all" multiplies subjects by
+    // keywords - refuse an accidental 300-call run up front with an
+    // actionable message rather than silently burning the quota.
+    const plannedQueries = targets.length * keywordTerms.length;
+    if (plannedQueries > MAX_QUERIES_PER_RUN) {
+      throw new ValidationError(
+        `This would run ${plannedQueries} searches (${targets.length} subjects x ${keywordTerms.length} keywords), ` +
+          `above the ${MAX_QUERIES_PER_RUN} limit. Select fewer keywords, or search subjects individually.`
       );
     }
 
-    const search = await prisma.adverseMediaSearch.create({
-      data: {
+    const searchedById = await getCurrentUserId();
+
+    // One AdverseMediaSearch row per subject, even for an "all" run: the
+    // schema records a single subject per search, and search history, triage
+    // and the knowledge repository all key off that subject name.
+    async function runForSubject(subjectType: SubjectType, subject: ResolvedSubject) {
+      const queries = keywordTerms.map((term) => `"${subject.subjectName}" ${term}`);
+      const searchRecord = {
         vendorId,
-        subjectType: body.subject_type,
+        subjectType,
         subjectName: subject.subjectName,
         relatedDirectorId: subject.relatedDirectorId,
         relatedShareholderId: subject.relatedShareholderId,
         keywordsUsed: queries,
-        searchStatus: "completed",
         searchedById,
-      },
-    });
+      };
 
-    // Layer 1: persist every article link straight from the SERP results,
-    // before any AI call. This is the row that matters most to the reviewer
-    // (the source link) and must survive even if the AI step below is
-    // rate-limited or fails outright.
-    if (newResults.length > 0) {
-      await prisma.adverseMediaArticle.createMany({
-        data: newResults.map((result) => ({
-          searchId: search.id,
-          vendorId,
-          articleTitle: result.title,
-          articleUrl: result.link,
-          sourceDomain: result.source ?? extractDomain(result.link),
-          categorizationStatus: "pending",
-        })),
-      });
-    }
-
-    const persistedArticles = await prisma.adverseMediaArticle.findMany({
-      where: { searchId: search.id },
-    });
-    const snippetByUrl = new Map(newResults.map((r) => [r.link, r.snippet]));
-
-    // Layer 2: retrieve the just-persisted articles and generate the AI
-    // summary for each. A failure here (e.g. the AI provider is rate-limited)
-    // only marks that one article's categorization as 'failed' - the article
-    // itself, already saved above, is unaffected and still returned.
-    await mapWithConcurrency(persistedArticles, CATEGORIZATION_CONCURRENCY, async (article) => {
+      // Run every query, then de-duplicate results by URL across all of them
+      // before saving. Only a failure of the SERP call itself marks the search
+      // 'failed' - per-article AI categorization failures are handled below and
+      // never fail the whole run.
+      // Bounded concurrency, not Promise.all - firing every keyword's query at
+      // once tripped SerpApi's per-account concurrency limit once enough
+      // keywords were selected, surfacing as a client-side timeout.
+      let resultSets: SerpOrganicResult[][];
       try {
-        const category: CategorizationResult = await categorizeArticle({
-          subjectName: subject.subjectName,
-          title: article.articleTitle,
-          url: article.articleUrl,
-          sourceDomain: article.sourceDomain,
-          snippet: snippetByUrl.get(article.articleUrl) ?? null,
-        });
-        await prisma.adverseMediaArticle.update({
-          where: { id: article.id },
-          data: {
-            riskTheme: category.risk_theme,
-            aiSummary: category.ai_summary,
-            categorizationStatus: "completed",
-          },
-        });
+        resultSets = await mapWithConcurrency(queries, SERP_SEARCH_CONCURRENCY, (q) =>
+          searchGoogle(q)
+        );
       } catch (err) {
-        console.error(`AI summary generation failed for ${article.articleUrl}:`, err);
-        await prisma.adverseMediaArticle.update({
-          where: { id: article.id },
-          data: { categorizationStatus: "failed" },
+        const failedSearch = await prisma.adverseMediaSearch.create({
+          data: { ...searchRecord, searchStatus: "failed" },
+        });
+        return { search: failedSearch, articles: [], duplicatesSkipped: 0, error: err };
+      }
+
+      const seenUrls = new Set<string>();
+      const dedupedResults: SerpOrganicResult[] = [];
+      for (const results of resultSets) {
+        for (const result of results) {
+          if (seenUrls.has(result.link)) continue;
+          seenUrls.add(result.link);
+          dedupedResults.push(result);
+        }
+      }
+
+      // Also drop anything this vendor already has saved from an earlier
+      // search - overlapping keywords (or the same keyword run again) often
+      // resurface the same article. Checked before the AI summary step so a
+      // known-duplicate URL never burns another categorization call. Because
+      // subjects run one after another, this also dedupes across the subjects
+      // of a single "all" run (a company article resurfacing for a director).
+      const existingUrls = await prisma.adverseMediaArticle.findMany({
+        where: { vendorId, articleUrl: { in: dedupedResults.map((r) => r.link) } },
+        select: { articleUrl: true },
+      });
+      const existingUrlSet = new Set(existingUrls.map((a) => a.articleUrl));
+      const newResults = dedupedResults.filter((r) => !existingUrlSet.has(r.link));
+      const duplicatesSkipped = dedupedResults.length - newResults.length;
+      if (duplicatesSkipped > 0) {
+        console.log(
+          `Skipped ${duplicatesSkipped} article(s) already saved for vendor ${vendorId} (${subject.subjectName})`
+        );
+      }
+
+      const search = await prisma.adverseMediaSearch.create({
+        data: { ...searchRecord, searchStatus: "completed" },
+      });
+
+      // Layer 1: persist every article link straight from the SERP results,
+      // before any AI call. This is the row that matters most to the reviewer
+      // (the source link) and must survive even if the AI step below is
+      // rate-limited or fails outright.
+      if (newResults.length > 0) {
+        await prisma.adverseMediaArticle.createMany({
+          data: newResults.map((result) => ({
+            searchId: search.id,
+            vendorId,
+            articleTitle: result.title,
+            articleUrl: result.link,
+            sourceDomain: result.source ?? extractDomain(result.link),
+            categorizationStatus: "pending",
+          })),
         });
       }
-    });
 
-    const fullSearch = await prisma.adverseMediaSearch.findUnique({
-      where: { id: search.id },
-      include: { articles: true },
-    });
+      const persistedArticles = await prisma.adverseMediaArticle.findMany({
+        where: { searchId: search.id },
+      });
+      const snippetByUrl = new Map(newResults.map((r) => [r.link, r.snippet]));
 
-    res.status(201).json({ ...fullSearch, duplicatesSkipped });
+      // Layer 2: retrieve the just-persisted articles and generate the AI
+      // summary for each. A failure here (e.g. the AI provider is rate-limited)
+      // only marks that one article's categorization as 'failed' - the article
+      // itself, already saved above, is unaffected and still returned.
+      await mapWithConcurrency(persistedArticles, CATEGORIZATION_CONCURRENCY, async (article) => {
+        try {
+          const category: CategorizationResult = await categorizeArticle({
+            subjectName: subject.subjectName,
+            title: article.articleTitle,
+            url: article.articleUrl,
+            sourceDomain: article.sourceDomain,
+            snippet: snippetByUrl.get(article.articleUrl) ?? null,
+          });
+          await prisma.adverseMediaArticle.update({
+            where: { id: article.id },
+            data: {
+              riskTheme: category.risk_theme,
+              aiSummary: category.ai_summary,
+              categorizationStatus: "completed",
+            },
+          });
+        } catch (err) {
+          console.error(`AI summary generation failed for ${article.articleUrl}:`, err);
+          await prisma.adverseMediaArticle.update({
+            where: { id: article.id },
+            data: { categorizationStatus: "failed" },
+          });
+        }
+      });
+
+      const fullSearch = await prisma.adverseMediaSearch.findUnique({
+        where: { id: search.id },
+        include: { articles: true },
+      });
+
+      return {
+        search: fullSearch ?? search,
+        articles: fullSearch?.articles ?? [],
+        duplicatesSkipped,
+        error: undefined as unknown,
+      };
+    }
+
+    // A single subject keeps its original response shape exactly.
+    if (body.subject_type !== "all") {
+      const { subjectType, subject } = targets[0];
+      const outcome = await runForSubject(subjectType, subject);
+      if (outcome.error) {
+        if (outcome.error instanceof SerpSearchError) {
+          res.status(502).json({ error: outcome.error.message, search: outcome.search });
+          return;
+        }
+        throw outcome.error;
+      }
+      res.status(201).json({ ...outcome.search, duplicatesSkipped: outcome.duplicatesSkipped });
+      return;
+    }
+
+    // "all": subjects run one after another so the per-vendor URL dedup above
+    // also spans subjects, and so a burst of subjects never exceeds SerpApi's
+    // per-account concurrency limit. One subject failing does not abort the rest.
+    const searches = [];
+    const articles = [];
+    const failedSubjects: string[] = [];
+    let duplicatesSkipped = 0;
+    let lastError: unknown;
+
+    for (const { subjectType, subject } of targets) {
+      const outcome = await runForSubject(subjectType, subject);
+      searches.push(outcome.search);
+      if (outcome.error) {
+        failedSubjects.push(subject.subjectName);
+        lastError = outcome.error;
+        continue;
+      }
+      articles.push(...outcome.articles);
+      duplicatesSkipped += outcome.duplicatesSkipped;
+    }
+
+    // Only a total wipeout is an error - a partial run still saved articles,
+    // and the response names the subjects that failed so the reviewer can
+    // retry just those.
+    if (failedSubjects.length === targets.length) {
+      if (lastError instanceof SerpSearchError) {
+        res.status(502).json({ error: lastError.message, searches, failedSubjects });
+        return;
+      }
+      throw lastError;
+    }
+
+    res.status(201).json({
+      subjectType: "all",
+      vendorId,
+      subjectsSearched: targets.length,
+      subjectNames: targets.map((t) => t.subject.subjectName),
+      failedSubjects,
+      searches,
+      articles,
+      duplicatesSkipped,
+    });
   })
 );
 

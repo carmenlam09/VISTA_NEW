@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { PdfPreviewPane } from "@/components/intake/PdfPreviewPane";
@@ -9,9 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ctosEnquiryQueryKey, useCtosEnquiryDetail } from "@/hooks/useScreening";
 import { useCreateCtosEnquiry, useExtractCtosEnquiry } from "@/hooks/useScreeningMutations";
 import { cn } from "@/lib/utils";
-import type { CtosEnquiry, Subject } from "@/types/screening";
+import type { Subject } from "@/types/screening";
 
 import { FinancialHighlightsCard } from "./FinancialHighlightsCard";
 import { LegalCasesTable } from "./LegalCasesTable";
@@ -33,17 +35,23 @@ export function AddCtosEnquiryModal({
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [phase, setPhase] = useState<Phase>("pick");
-  const [enquiry, setEnquiry] = useState<CtosEnquiry | null>(null);
+  // Only the id is tracked locally - the enquiry itself is read live below, so
+  // every child's "Confirm & Save" is reflected here immediately instead of
+  // only after the modal is closed and reopened (each save invalidates this
+  // same query - see useInvalidateScreening).
+  const [enquiryId, setEnquiryId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
   const createEnquiry = useCreateCtosEnquiry(vendorId);
   const extractEnquiry = useExtractCtosEnquiry(vendorId);
+  const { data: enquiry } = useCtosEnquiryDetail(phase === "review" ? enquiryId : null);
 
   function reset() {
     setSubject(null);
     setFile(null);
     setPhase("pick");
-    setEnquiry(null);
+    setEnquiryId(null);
     setErrorMessage(null);
   }
 
@@ -64,7 +72,10 @@ export function AddCtosEnquiryModal({
       });
       setPhase("extracting");
       const extracted = await extractEnquiry.mutateAsync(created.id);
-      setEnquiry(extracted);
+      // Seed the cache with what extraction just returned, so the review
+      // screen below renders immediately instead of waiting on a refetch.
+      queryClient.setQueryData(ctosEnquiryQueryKey(extracted.id), extracted);
+      setEnquiryId(extracted.id);
       setPhase("review");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Something went wrong");

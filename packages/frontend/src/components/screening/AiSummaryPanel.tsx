@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useGenerateScreeningSummary } from "@/hooks/useScreeningMutations";
+import { formatDateTime } from "@/lib/utils";
 import type { ScreeningSummary } from "@/types/screening";
 
 export function AiSummaryPanel({
@@ -33,7 +34,7 @@ export function AiSummaryPanel({
         <>
           <p className="whitespace-pre-line text-sm">{summary.summaryText}</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Generated {new Date(summary.generatedAt).toLocaleString()}
+            Generated {formatDateTime(summary.generatedAt)}
             {summary.generatedByModel ? ` · ${summary.generatedByModel}` : ""}
           </p>
         </>

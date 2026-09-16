@@ -7,6 +7,7 @@ import {
   useRejectKyvReport,
   useSubmitKyvReportForReview,
 } from "@/hooks/useKyvReportMutations";
+import { formatDate } from "@/lib/utils";
 import type { KyvReportDetail } from "@/types/kyvReport";
 
 // Maker-Checker action buttons appropriate to the report's current status
@@ -92,7 +93,7 @@ export function KyvReportActions({
 
   return (
     <p className="text-sm text-muted-foreground">
-      Approved{report.reviewedAt ? ` on ${new Date(report.reviewedAt).toLocaleDateString()}` : ""}{" "}
+      Approved{report.reviewedAt ? ` on ${formatDate(report.reviewedAt)}` : ""}{" "}
       - read-only.
     </p>
   );

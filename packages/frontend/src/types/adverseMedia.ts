@@ -34,6 +34,8 @@ export interface AdverseMediaKeyword {
 export interface AdverseMediaSearchRun {
   id: string;
   vendorId: string;
+  // Always a single subject: an "all" run creates one row per subject
+  // rather than a row typed "all".
   subjectType: SubjectType;
   subjectName: string;
   relatedDirectorId: string | null;
@@ -48,6 +50,12 @@ export interface AdverseMediaSearchRun {
   // whose URL this vendor already had saved from an earlier search, so they
   // were skipped rather than re-saved and re-summarized.
   duplicatesSkipped?: number;
+  // Present only on an "all" run, which creates one search per subject and
+  // returns them together rather than a single search row.
+  subjectsSearched?: number;
+  subjectNames?: string[];
+  failedSubjects?: string[];
+  searches?: AdverseMediaSearchRun[];
 }
 
 export type ReviewerDecision = "pending" | "relevant" | "false_positive";

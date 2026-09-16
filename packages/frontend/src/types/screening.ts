@@ -6,6 +6,12 @@ export interface Subject {
   name: string;
 }
 
+// Adverse media can search the company and every related party in one run.
+// Screening (CTOS/NetReveal) still takes exactly one subject, so this lives
+// beside SubjectType rather than widening it.
+export const ALL_SUBJECTS_ID = "__all__";
+export type AdverseMediaSubjectType = SubjectType | "all";
+
 export interface EnquirySubjectRef {
   id: string;
   subjectType: SubjectType;

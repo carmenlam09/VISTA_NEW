@@ -235,12 +235,12 @@ export function Sidebar() {
 
         <div
           className={cn("flex items-center gap-2.5 rounded-md px-2 py-1.5", collapsed && "justify-center px-0")}
-          title={collapsed ? "Default Reviewer" : undefined}
+          title={collapsed ? "Carmen" : undefined}
         >
-          <InitialsAvatar name="Default Reviewer" tone="brand" size="md" />
+          <InitialsAvatar name="Carmen" tone="brand" size="md" />
           {!collapsed && (
             <div className="min-w-0 leading-tight">
-              <div className="truncate text-xs font-semibold text-white">Default Reviewer</div>
+              <div className="truncate text-xs font-semibold text-white">Carmen</div>
               <div className="text-[10px] text-sidebar-muted">Reviewer</div>
             </div>
           )}

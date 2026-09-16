@@ -50,11 +50,26 @@ export function FinancialHighlightsCard({
   financialHighlights: CtosFinancialHighlights | null;
 }) {
   const [form, setForm] = useState<FinancialHighlightsInput>(() => toForm(financialHighlights));
+  const [savedForm, setSavedForm] = useState<FinancialHighlightsInput>(() =>
+    toForm(financialHighlights)
+  );
   const updateFinancialHighlights = useUpdateFinancialHighlights(vendorId);
   const verified = financialHighlights?.isVerified ?? false;
+  // Once verified, only re-enable the button if the reviewer edits something new -
+  // otherwise "Confirm & Save" stays clickable forever, indistinguishable from a
+  // section that actually still needs review.
+  const isDirty = JSON.stringify(form) !== JSON.stringify(savedForm);
+  const canSave = !verified || isDirty;
 
   function set(key: keyof FinancialHighlightsInput, raw: string) {
     setForm((prev) => ({ ...prev, [key]: raw === "" ? null : Number(raw) }));
+  }
+
+  function save() {
+    updateFinancialHighlights.mutate(
+      { ctosEnquiryId, input: form },
+      { onSuccess: () => setSavedForm(form) }
+    );
   }
 
   return (
@@ -110,11 +125,7 @@ export function FinancialHighlightsCard({
       )}
 
       <div className="mt-3 flex justify-end">
-        <Button
-          size="sm"
-          disabled={updateFinancialHighlights.isPending}
-          onClick={() => updateFinancialHighlights.mutate({ ctosEnquiryId, input: form })}
-        >
+        <Button size="sm" disabled={updateFinancialHighlights.isPending || !canSave} onClick={save}>
           {updateFinancialHighlights.isPending ? "Saving..." : "Confirm & Save"}
         </Button>
       </div>

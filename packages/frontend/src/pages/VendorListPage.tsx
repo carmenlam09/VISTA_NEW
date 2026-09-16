@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -9,12 +9,14 @@ import { RiskExposureCard } from "@/components/dashboard/RiskExposureCard";
 import { WelcomeBanner } from "@/components/dashboard/WelcomeBanner";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePickerInput } from "@/components/ui/date-picker-input";
 import { Input } from "@/components/ui/input";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { useVendors } from "@/hooks/useVendors";
 import { useCreateVendor, useDeleteVendor } from "@/hooks/useVendorMutations";
-import { RISK_TIERS } from "@/lib/risk";
-import type { VendorRisk } from "@/types/overview";
+import { RISK_TIER_ORDER, RISK_TIERS } from "@/lib/risk";
+import { formatDate, parseDdMmYyyy } from "@/lib/utils";
+import type { RiskTier, VendorRisk } from "@/types/overview";
 
 const STATUS_BADGE: Record<string, { variant: BadgeProps["variant"]; label: string }> = {
   draft: { variant: "secondary", label: "Draft" },
@@ -23,8 +25,23 @@ const STATUS_BADGE: Record<string, { variant: BadgeProps["variant"]; label: stri
   rejected: { variant: "destructive", label: "Rejected" },
 };
 
+const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All statuses" },
+  { value: "draft", label: "Draft" },
+  { value: "in_review", label: "In Review" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const RISK_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All risk levels" },
+  ...RISK_TIER_ORDER.map((tier) => ({ value: tier, label: RISK_TIERS[tier].label })),
+];
+
+const MAX_RESULTS = 5;
+
 // Stubbed auth (CLAUDE.md §2) - matches the reviewer the backend attributes to.
-const CURRENT_USER_NAME = "Default Reviewer";
+const CURRENT_USER_NAME = "Carmen";
 
 function RiskCell({ risk }: { risk: VendorRisk | undefined }) {
   if (!risk) return <span className="text-xs text-muted-foreground">—</span>;
@@ -58,10 +75,82 @@ export function VendorListPage() {
   const [companyName, setCompanyName] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
+  // Plain text, not a native <input type="date"> - that control's typing
+  // order follows the browser's locale (month-first for en-US), which
+  // silently rejects a reviewer typing day-first the way every other date in
+  // this app displays. maskDateInput reformats digits to dd-mm-yyyy live as
+  // they're typed; parseDdMmYyyy below only resolves once it's complete.
+  const [dateFromText, setDateFromText] = useState("");
+  const [dateToText, setDateToText] = useState("");
+
   const riskByVendorId = useMemo(
     () => new Map((overview?.risk.byVendor ?? []).map((v) => [v.vendorId, v])),
     [overview]
   );
+
+  const hasActiveFilters =
+    statusFilter !== "all" || riskFilter !== "all" || dateFromText !== "" || dateToText !== "";
+
+  function clearFilters() {
+    setStatusFilter("all");
+    setRiskFilter("all");
+    setDateFromText("");
+    setDateToText("");
+  }
+
+  const dateFromStart = useMemo(() => parseDdMmYyyy(dateFromText), [dateFromText]);
+  // "To" is a whole calendar day, so a vendor created any time on that day
+  // should still match rather than only up to midnight.
+  const dateToInclusive = useMemo(() => {
+    const parsed = parseDdMmYyyy(dateToText);
+    if (!parsed) return null;
+    parsed.setHours(23, 59, 59, 999);
+    return parsed;
+  }, [dateToText]);
+  // Only flag as invalid once the reviewer has typed a full 8 digits (the
+  // "dd-mm-yyyy" mask reaches its full 10 characters) - anything shorter is
+  // just "not finished typing yet", not wrong.
+  const dateFromInvalid = dateFromText.length === 10 && dateFromStart === null;
+  const dateToInvalid = dateToText.length === 10 && dateToInclusive === null;
+
+  const filteredVendors = useMemo(() => {
+    if (!vendors) return [];
+    return vendors.filter((vendor) => {
+      if (statusFilter !== "all" && vendor.status !== statusFilter) return false;
+
+      if (riskFilter !== "all") {
+        const tier: RiskTier = riskByVendorId.get(vendor.id)?.tier ?? "unassessed";
+        if (tier !== riskFilter) return false;
+      }
+
+      const createdAt = new Date(vendor.createdAt);
+      if (dateFromStart && createdAt < dateFromStart) return false;
+      if (dateToInclusive && createdAt > dateToInclusive) return false;
+
+      return true;
+    });
+  }, [vendors, statusFilter, riskFilter, dateFromStart, dateToInclusive, riskByVendorId]);
+
+  // Highest risk first once filtered - the vendors most worth a reviewer's
+  // attention should surface first when the list is capped. A vendor with no
+  // triage findings yet (score === null) sorts last, not first: it isn't
+  // "low risk", it's unscored, so it shouldn't crowd out ones that actually
+  // need review.
+  const sortedVendors = useMemo(() => {
+    return [...filteredVendors].sort((a, b) => {
+      const scoreA = riskByVendorId.get(a.id)?.score ?? null;
+      const scoreB = riskByVendorId.get(b.id)?.score ?? null;
+      if (scoreA === null && scoreB === null) return 0;
+      if (scoreA === null) return 1;
+      if (scoreB === null) return -1;
+      return scoreB - scoreA;
+    });
+  }, [filteredVendors, riskByVendorId]);
+
+  const displayedVendors = sortedVendors.slice(0, MAX_RESULTS);
+  const hiddenCount = sortedVendors.length - displayedVendors.length;
 
   function handleConfirmDelete(vendorId: string) {
     deleteVendor.mutate(vendorId, {
@@ -118,6 +207,97 @@ export function VendorListPage() {
               <Plus className="mr-1 h-4 w-4" />
               New Vendor
             </Button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 border-t border-border px-5 py-3">
+          <div>
+            <label htmlFor="vendor-status-filter" className="mb-1 block text-[11px] font-medium text-muted-foreground">
+              Status
+            </label>
+            <select
+              id="vendor-status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-medium outline-none transition-colors focus:border-brand/40 focus:ring-2 focus:ring-brand/[0.15]"
+            >
+              {STATUS_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="vendor-risk-filter" className="mb-1 block text-[11px] font-medium text-muted-foreground">
+              Risk score
+            </label>
+            <select
+              id="vendor-risk-filter"
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+              className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-medium outline-none transition-colors focus:border-brand/40 focus:ring-2 focus:ring-brand/[0.15]"
+            >
+              {RISK_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="vendor-date-from" className="mb-1 block text-[11px] font-medium text-muted-foreground">
+              Created from
+            </label>
+            <DatePickerInput
+              id="vendor-date-from"
+              value={dateFromText}
+              onChange={setDateFromText}
+              invalid={dateFromInvalid}
+              maxDate={dateToInclusive}
+              className="h-8 w-[8.5rem] text-xs"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="vendor-date-to" className="mb-1 block text-[11px] font-medium text-muted-foreground">
+              Created to
+            </label>
+            <DatePickerInput
+              id="vendor-date-to"
+              value={dateToText}
+              onChange={setDateToText}
+              invalid={dateToInvalid}
+              minDate={dateFromStart}
+              className="h-8 w-[8.5rem] text-xs"
+            />
+          </div>
+          {(dateFromInvalid || dateToInvalid) && (
+            <p className="self-center text-[11px] text-destructive">Use dd-mm-yyyy</p>
+          )}
+
+          {hasActiveFilters && (
+            <Button size="sm" variant="ghost" onClick={clearFilters} className="h-8">
+              <X className="mr-1 h-3.5 w-3.5" />
+              Clear filters
+            </Button>
+          )}
+
+          {!isLoading && !isError && vendors && vendors.length > 0 && (
+            <p className="ml-auto text-[11px] text-muted-foreground">
+              {hasActiveFilters ? (
+                <>
+                  {sortedVendors.length} of {vendors.length} vendors match
+                  {hiddenCount > 0 && <> — showing top {displayedVendors.length} by risk score</>}
+                </>
+              ) : (
+                hiddenCount > 0 && (
+                  <>Showing top {displayedVendors.length} of {sortedVendors.length} by risk score</>
+                )
+              )}
+            </p>
           )}
         </div>
 
@@ -182,7 +362,17 @@ export function VendorListPage() {
                   </td>
                 </tr>
               )}
-              {vendors?.map((vendor) => {
+              {!isLoading && !isError && vendors && vendors.length > 0 && displayedVendors.length === 0 && (
+                <tr>
+                  <td className="px-5 py-6 text-muted-foreground" colSpan={6}>
+                    No vendors match these filters.{" "}
+                    <button type="button" className="font-medium text-brand hover:underline" onClick={clearFilters}>
+                      Clear filters
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {displayedVendors.map((vendor) => {
                 const status = STATUS_BADGE[vendor.status] ?? STATUS_BADGE.draft;
                 return (
                   <tr
@@ -202,7 +392,7 @@ export function VendorListPage() {
                       <RiskCell risk={riskByVendorId.get(vendor.id)} />
                     </td>
                     <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                      {new Date(vendor.createdAt).toLocaleDateString()}
+                      {formatDate(vendor.createdAt)}
                     </td>
                     <td className="px-5 py-3 text-right">
                       {pendingDeleteId === vendor.id ? (

@@ -12,7 +12,7 @@ import type {
   SubjectType,
 } from "@/types/screening";
 
-import { screeningQueryKey } from "./useScreening";
+import { ctosEnquiryQueryKey, screeningQueryKey } from "./useScreening";
 
 export interface SubjectInput {
   subject_type: SubjectType;
@@ -20,10 +20,20 @@ export interface SubjectInput {
   related_shareholder_id?: string | null;
 }
 
+// Every CTOS/NetReveal mutation invalidates the vendor-wide screening
+// aggregate, which is what keeps the main Screening page correctly reactive.
+// The upload-review modal shows a single enquiry BEFORE it's necessarily
+// reflected in that aggregate's shape (or scoped correctly within it - see
+// useCtosEnquiryDetail), so mutations that touch one enquiry also take its
+// id here to invalidate that enquiry's own detail query, keeping the modal
+// itself live instead of only updating once it's closed and reopened.
 function useInvalidateScreening(vendorId: string | undefined) {
   const queryClient = useQueryClient();
-  return () => {
+  return (ctosEnquiryId?: string) => {
     queryClient.invalidateQueries({ queryKey: screeningQueryKey(vendorId) });
+    if (ctosEnquiryId) {
+      queryClient.invalidateQueries({ queryKey: ctosEnquiryQueryKey(ctosEnquiryId) });
+    }
   };
 }
 
@@ -48,7 +58,7 @@ export function useCreateCtosEnquiry(vendorId: string | undefined) {
         `/api/vendors/${vendorId}/ctos-enquiries`,
         buildSubjectFormData(file, input)
       ),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(),
   });
 }
 
@@ -57,7 +67,7 @@ export function useExtractCtosEnquiry(vendorId: string | undefined) {
   return useMutation({
     mutationFn: (ctosEnquiryId: string) =>
       apiPost<CtosEnquiry>(`/api/ctos-enquiries/${ctosEnquiryId}/extract`),
-    onSuccess: invalidate,
+    onSuccess: (_data, ctosEnquiryId) => invalidate(ctosEnquiryId),
   });
 }
 
@@ -87,7 +97,7 @@ export function useUpdateFinancialHighlights(vendorId: string | undefined) {
         `/api/ctos-enquiries/${ctosEnquiryId}/financial-highlights`,
         input
       ),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.ctosEnquiryId),
   });
 }
 
@@ -105,7 +115,7 @@ export function useCreateLegalCase(vendorId: string | undefined) {
   return useMutation({
     mutationFn: ({ ctosEnquiryId, input }: { ctosEnquiryId: string; input: LegalCaseInput }) =>
       apiPost<CtosLegalCase>(`/api/ctos-enquiries/${ctosEnquiryId}/legal-cases`, input),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.ctosEnquiryId),
   });
 }
 
@@ -121,7 +131,7 @@ export function useUpdateLegalCase(vendorId: string | undefined) {
       caseId: string;
       input: Partial<LegalCaseInput>;
     }) => apiPut<CtosLegalCase>(`/api/ctos-enquiries/${ctosEnquiryId}/legal-cases/${caseId}`, input),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.ctosEnquiryId),
   });
 }
 
@@ -130,7 +140,7 @@ export function useDeleteLegalCase(vendorId: string | undefined) {
   return useMutation({
     mutationFn: ({ ctosEnquiryId, caseId }: { ctosEnquiryId: string; caseId: string }) =>
       apiDelete(`/api/ctos-enquiries/${ctosEnquiryId}/legal-cases/${caseId}`),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.ctosEnquiryId),
   });
 }
 
@@ -148,7 +158,7 @@ export function useCreateTradeReference(vendorId: string | undefined) {
   return useMutation({
     mutationFn: ({ ctosEnquiryId, input }: { ctosEnquiryId: string; input: TradeReferenceInput }) =>
       apiPost<CtosTradeReference>(`/api/ctos-enquiries/${ctosEnquiryId}/trade-references`, input),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.ctosEnquiryId),
   });
 }
 
@@ -168,7 +178,7 @@ export function useUpdateTradeReference(vendorId: string | undefined) {
         `/api/ctos-enquiries/${ctosEnquiryId}/trade-references/${refId}`,
         input
       ),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.ctosEnquiryId),
   });
 }
 
@@ -177,7 +187,7 @@ export function useDeleteTradeReference(vendorId: string | undefined) {
   return useMutation({
     mutationFn: ({ ctosEnquiryId, refId }: { ctosEnquiryId: string; refId: string }) =>
       apiDelete(`/api/ctos-enquiries/${ctosEnquiryId}/trade-references/${refId}`),
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.ctosEnquiryId),
   });
 }
 
@@ -191,7 +201,7 @@ export function useCreateNetrevealRecord(vendorId: string | undefined) {
         `/api/vendors/${vendorId}/netreveal-records`,
         buildSubjectFormData(file, input)
       ),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(),
   });
 }
 
@@ -200,7 +210,7 @@ export function useExtractNetrevealRecord(vendorId: string | undefined) {
   return useMutation({
     mutationFn: (recordId: string) =>
       apiPost<NetrevealRecord>(`/api/netreveal-records/${recordId}/extract`),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(),
   });
 }
 
@@ -217,7 +227,7 @@ export function useUpdateNetrevealRecord(vendorId: string | undefined) {
   return useMutation({
     mutationFn: ({ recordId, input }: { recordId: string; input: NetrevealUpdateInput }) =>
       apiPut<NetrevealRecord>(`/api/netreveal-records/${recordId}`, input),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(),
   });
 }
 
@@ -227,6 +237,6 @@ export function useGenerateScreeningSummary(vendorId: string | undefined) {
   const invalidate = useInvalidateScreening(vendorId);
   return useMutation({
     mutationFn: () => apiPost<ScreeningSummary>(`/api/vendors/${vendorId}/screening-summary`),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate(),
   });
 }

@@ -12,7 +12,7 @@ import { NotificationBell } from "./NotificationBell";
 // Auth is still stubbed (see CLAUDE.md §2) - this mirrors the hardcoded
 // reviewer the backend attributes records to, so the chip is not inventing
 // an identity the rest of the app doesn't already assume.
-const CURRENT_USER = { name: "Default Reviewer", role: "Reviewer" };
+const CURRENT_USER = { name: "Carmen", role: "Reviewer" };
 
 function UserChip() {
   return (

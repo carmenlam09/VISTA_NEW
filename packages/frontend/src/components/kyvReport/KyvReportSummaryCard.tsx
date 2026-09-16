@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { useKyvReportHistory } from "@/hooks/useKyvReports";
+import { formatDate } from "@/lib/utils";
 import type { KyvReportStatus } from "@/types/kyvReport";
 
 const STATUS_BADGE: Record<KyvReportStatus, { label: string; variant: BadgeProps["variant"] }> = {
@@ -40,7 +41,7 @@ export function KyvReportSummaryCard({ vendorId }: { vendorId: string }) {
             {STATUS_BADGE[latest.status].label}
           </Badge>
           <span className="text-sm text-muted-foreground">
-            {new Date(latest.generatedAt).toLocaleDateString()}
+            {formatDate(latest.generatedAt)}
           </span>
         </div>
       )}

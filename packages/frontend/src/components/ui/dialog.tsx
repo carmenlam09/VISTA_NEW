@@ -1,4 +1,5 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -33,6 +34,14 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
+      {/* Explicit close affordance on every dialog in the app - relying on a
+          backdrop click alone isn't discoverable, and this row-level fix
+          would otherwise need repeating in every modal that uses this
+          component. */}
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+        <X size={16} />
+        <span className="sr-only">Close</span>
+      </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
 ));

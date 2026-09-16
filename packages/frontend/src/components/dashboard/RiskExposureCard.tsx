@@ -41,13 +41,27 @@ export function RiskExposureCard({ risk }: { risk: DashboardOverview["risk"] }) 
           <h3 className="text-sm font-bold">Risk Exposure Summary</h3>
           <p className="text-[11px] text-muted-foreground">Vendors by derived risk tier</p>
         </div>
-        <span
-          title={methodologyNote}
-          aria-label={`How risk is calculated: ${methodologyNote}`}
-          className="cursor-help rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Info size={14} />
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {risk.portfolioScore !== null && (
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+              style={{
+                backgroundColor: `${RISK_TIERS[risk.portfolioTier].hex}1a`,
+                color: RISK_TIERS[risk.portfolioTier].hex,
+              }}
+              title="Mean score across vendors with at least one triage finding"
+            >
+              Portfolio {risk.portfolioScore} · {RISK_TIERS[risk.portfolioTier].label}
+            </span>
+          )}
+          <span
+            title={methodologyNote}
+            aria-label={`How risk is calculated: ${methodologyNote}`}
+            className="cursor-help rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Info size={14} />
+          </span>
+        </div>
       </div>
 
       {total === 0 ? (

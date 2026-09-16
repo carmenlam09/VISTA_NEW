@@ -151,7 +151,7 @@ export function AddNetrevealModal({
           <div className="space-y-4">
             <div className="grid gap-4 lg:grid-cols-2">
               <PdfPreviewPane documentId={record.documentId} />
-              <NetrevealCard vendorId={vendorId} record={record} />
+              <NetrevealCard vendorId={vendorId} record={record} onSaved={setRecord} />
             </div>
             <div className="flex justify-end">
               <Button onClick={() => handleOpenChange(false)}>Done</Button>

@@ -1,6 +1,6 @@
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import type { KyvReportStatus, KyvReportSummary } from "@/types/kyvReport";
 
 const STATUS_BADGE: Record<KyvReportStatus, { label: string; variant: BadgeProps["variant"] }> = {
@@ -46,7 +46,7 @@ export function KyvReportHistoryList({
                 <div className="flex items-center gap-3">
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                   <span className="text-xs text-muted-foreground">
-                    {new Date(report.generatedAt).toLocaleString()}
+                    {formatDateTime(report.generatedAt)}
                   </span>
                 </div>
                 <Button

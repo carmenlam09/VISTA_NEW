@@ -1,16 +1,25 @@
 import { useSubjects } from "@/hooks/useSubjects";
 import { cn } from "@/lib/utils";
-import type { Subject } from "@/types/screening";
+import { ALL_SUBJECTS_ID, type Subject } from "@/types/screening";
 
 export function SubjectPicker({
   vendorId,
   value,
   onChange,
+  onSelectAll,
+  includeAll = false,
   className,
 }: {
   vendorId: string;
   value: string;
   onChange: (subject: Subject) => void;
+  /**
+   * Adverse media only. Kept as its own callback so onChange keeps its
+   * (subject: Subject) signature for the screening modals, which have no
+   * meaningful "every related party" mode.
+   */
+  onSelectAll?: () => void;
+  includeAll?: boolean;
   className?: string;
 }) {
   const { data: subjects, isLoading } = useSubjects(vendorId);
@@ -24,6 +33,10 @@ export function SubjectPicker({
       value={value}
       disabled={isLoading}
       onChange={(e) => {
+        if (e.target.value === ALL_SUBJECTS_ID) {
+          onSelectAll?.();
+          return;
+        }
         const subject = subjects?.find((s) => s.id === e.target.value);
         if (subject) onChange(subject);
       }}
@@ -35,6 +48,11 @@ export function SubjectPicker({
       <option value="" disabled>
         {isLoading ? "Loading subjects..." : "Select who this is about..."}
       </option>
+      {includeAll && subjects && subjects.length > 0 && (
+        <option value={ALL_SUBJECTS_ID}>
+          All - company and related parties ({subjects.length})
+        </option>
+      )}
       {companies.length > 0 && (
         <optgroup label="Company">
           {companies.map((s) => (

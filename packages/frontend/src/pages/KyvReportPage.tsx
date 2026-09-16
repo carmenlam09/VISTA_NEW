@@ -9,6 +9,7 @@ import { useAdverseMediaArticles } from "@/hooks/useAdverseMedia";
 import { useGenerateKyvReport } from "@/hooks/useKyvReportMutations";
 import { useKyvReport, useKyvReportHistory } from "@/hooks/useKyvReports";
 import { useScreening } from "@/hooks/useScreening";
+import { formatDateTime } from "@/lib/utils";
 
 export function KyvReportPage() {
   const { vendorId } = useParams<{ vendorId: string }>();
@@ -81,7 +82,7 @@ export function KyvReportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold">
-                  Report generated {new Date(report.generatedAt).toLocaleString()}
+                  Report generated {formatDateTime(report.generatedAt)}
                 </h2>
                 <p className="text-xs text-muted-foreground">
                   Template: {report.template.name} ({report.template.version})

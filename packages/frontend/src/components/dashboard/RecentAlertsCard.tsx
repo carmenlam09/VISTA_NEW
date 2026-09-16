@@ -1,7 +1,7 @@
 import { AlertOctagon, AlertTriangle, FileClock, type LucideIcon } from "lucide-react";
 
 import { formatRelativeTime } from "@/lib/risk";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import type { DashboardAlert } from "@/types/overview";
 
 const SEVERITY: Record<DashboardAlert["severity"], { icon: LucideIcon; classes: string }> = {
@@ -49,7 +49,7 @@ export function RecentAlertsCard({ alerts }: { alerts: DashboardAlert[] }) {
                 </div>
                 <time
                   dateTime={alert.at}
-                  title={new Date(alert.at).toLocaleString()}
+                  title={formatDateTime(alert.at)}
                   className="shrink-0 text-[10px] tabular-nums text-muted-foreground"
                 >
                   {formatRelativeTime(alert.at)}

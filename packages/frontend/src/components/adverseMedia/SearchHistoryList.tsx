@@ -1,6 +1,7 @@
 import { SubjectBadge } from "@/components/screening/SubjectBadge";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible } from "@/components/ui/collapsible";
+import { formatDateTime } from "@/lib/utils";
 import type { AdverseMediaSearchRun } from "@/types/adverseMedia";
 
 export function SearchHistoryList({ searches }: { searches: AdverseMediaSearchRun[] }) {
@@ -17,7 +18,7 @@ export function SearchHistoryList({ searches }: { searches: AdverseMediaSearchRu
                 <div className="flex items-center justify-between gap-2">
                   <SubjectBadge subjectType={search.subjectType} subjectName={search.subjectName} />
                   <span className="whitespace-nowrap text-xs text-muted-foreground">
-                    {new Date(search.searchedAt).toLocaleString()}
+                    {formatDateTime(search.searchedAt)}
                   </span>
                 </div>
                 <div className="mt-1.5 text-xs text-muted-foreground">

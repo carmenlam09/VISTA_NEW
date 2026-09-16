@@ -21,6 +21,32 @@ function toDate(value: string | null | undefined): Date | null | undefined {
   return parsed;
 }
 
+// Single-enquiry fetch, scoped correctly to exactly this enquiry's own
+// financial highlights/legal cases/trade references - unlike the vendor-wide
+// /api/vendors/:id/screening aggregate, whose financialHighlights field is
+// only ever the vendor's most recent COMPANY-subject enquiry and whose
+// legalCases/tradeReferences are flattened across every enquiry. The
+// upload-review modal needs the one enquiry it just created, reliably, no
+// matter its subject type - this is what its "Confirm & Save" buttons
+// refetch after a save so the modal itself reflects a save immediately
+// instead of only after it's closed and reopened.
+ctosEnquiriesRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const enquiry = await prisma.ctosEnquiry.findUnique({
+      where: { id: req.params.id },
+      include: {
+        document: true,
+        financialHighlights: true,
+        legalCases: true,
+        tradeReferences: true,
+      },
+    });
+    if (!enquiry) throw new NotFoundError("CTOS enquiry not found");
+    res.json(enquiry);
+  })
+);
+
 ctosEnquiriesRouter.post(
   "/:id/extract",
   asyncHandler(async (req, res) => {
@@ -221,6 +247,17 @@ ctosEnquiriesRouter.put(
   "/:id/legal-cases/:caseId",
   asyncHandler(async (req, res) => {
     const body = legalCaseSchema.partial().parse(req.body);
+    // Editing the actual content of an already-verified row must reopen it for
+    // review - unless the same request explicitly re-confirms it. Otherwise a
+    // reviewer editing a verified case's remark leaves it silently marked
+    // verified without ever having confirmed the new content.
+    const touchesContent =
+      body.case_type !== undefined ||
+      body.plaintiff !== undefined ||
+      body.defendant !== undefined ||
+      body.case_no !== undefined ||
+      body.remark !== undefined;
+    const isVerified = touchesContent && body.is_verified !== true ? false : body.is_verified;
     const result = await prisma.ctosLegalCase.updateMany({
       where: { id: req.params.caseId, ctosEnquiryId: req.params.id },
       data: {
@@ -229,7 +266,7 @@ ctosEnquiriesRouter.put(
         defendant: body.defendant,
         caseNo: body.case_no,
         remark: body.remark,
-        isVerified: body.is_verified,
+        isVerified,
       },
     });
     if (result.count === 0) throw new NotFoundError("Legal case not found");
@@ -286,6 +323,15 @@ ctosEnquiriesRouter.put(
   "/:id/trade-references/:refId",
   asyncHandler(async (req, res) => {
     const body = tradeReferenceSchema.partial().parse(req.body);
+    // Editing the actual content of an already-verified row must reopen it for
+    // review - unless the same request explicitly re-confirms it.
+    const touchesContent =
+      body.referee !== undefined ||
+      body.account_no !== undefined ||
+      body.capacity !== undefined ||
+      body.statement_date !== undefined ||
+      body.default_amount !== undefined;
+    const isVerified = touchesContent && body.is_verified !== true ? false : body.is_verified;
     const result = await prisma.ctosTradeReference.updateMany({
       where: { id: req.params.refId, ctosEnquiryId: req.params.id },
       data: {
@@ -294,7 +340,7 @@ ctosEnquiriesRouter.put(
         capacity: body.capacity,
         statementDate: toDate(body.statement_date),
         defaultAmount: body.default_amount,
-        isVerified: body.is_verified,
+        isVerified,
       },
     });
     if (result.count === 0) throw new NotFoundError("Trade reference not found");
