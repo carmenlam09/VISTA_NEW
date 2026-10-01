@@ -7,12 +7,13 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
-import { Maximize2, Minus, Plus, X } from "lucide-react";
+import { Maximize2, Minus, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { Input } from "@/components/ui/input";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { useNetworkGraph } from "@/hooks/useNetworkGraph";
 import { RISK_TIERS, RISK_TIER_ORDER } from "@/lib/risk";
@@ -162,6 +163,13 @@ export function NetworkGraph() {
   heightRef.current = height;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [, forceRerender] = useState(0);
+
+  // Finds a vendor (or director/shareholder) by name as the list grows past
+  // what's comfortable to eyeball on the canvas - searches only within the
+  // currently filtered dataset, so every result is actually focusable.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   const [transform, setTransform] = useState<Transform>({ k: 1, x: 0, y: 0 });
   // Pointer handlers read the live transform without being re-created on
@@ -332,6 +340,48 @@ export function NetworkGraph() {
     simulationRef.current?.alphaTarget(0);
   }
 
+  const searchMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || !data) return [];
+    return data.nodes.filter((n) => n.label.toLowerCase().includes(q)).slice(0, 8);
+  }, [searchQuery, data]);
+
+  // Selects the node (same as a click - opens its detail panel) and pans/
+  // zooms the canvas so it's actually visible and legible, rather than
+  // leaving the reviewer to hunt for a tiny dot somewhere off in a large
+  // force-directed layout.
+  const focusNode = useCallback((nodeId: string) => {
+    const node = simNodesRef.current.find((n) => n.id === nodeId);
+    if (!node) return;
+    setSelectedId(nodeId);
+    const k = clamp(Math.max(transformRef.current.k, 1.1), MIN_ZOOM, MAX_ZOOM);
+    const cx = widthRef.current / 2;
+    const cy = (heightRef.current - BOTTOM_CHROME) / 2;
+    setTransform({ k, x: cx - (node.x ?? 0) * k, y: cy - (node.y ?? 0) * k });
+  }, []);
+
+  function selectSearchMatch(nodeId: string) {
+    focusNode(nodeId);
+    setSearchQuery("");
+    setSearchOpen(false);
+  }
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (!searchContainerRef.current?.contains(e.target as Node)) setSearchOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setSearchOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [searchOpen]);
+
   const connectionsByNodeId = useMemo(() => {
     const map = new Map<string, NetworkNode[]>();
     if (!data) return map;
@@ -363,21 +413,77 @@ export function NetworkGraph() {
             inspect.
           </p>
         </div>
-        <label className="sr-only" htmlFor="network-filter">
-          Relationship filter
-        </label>
-        <select
-          id="network-filter"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as RelationshipFilter)}
-          className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-medium outline-none transition-colors focus:border-brand/40 focus:ring-2 focus:ring-brand/[0.15]"
-        >
-          {(Object.keys(FILTER_LABELS) as RelationshipFilter[]).map((key) => (
-            <option key={key} value={key}>
-              {FILTER_LABELS[key]}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <div ref={searchContainerRef} className="relative">
+            <label className="sr-only" htmlFor="network-search">
+              Search the network
+            </label>
+            <Search
+              size={13}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="network-search"
+              type="text"
+              placeholder="Find a vendor or person..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchMatches.length > 0) {
+                  e.preventDefault();
+                  selectSearchMatch(searchMatches[0].id);
+                }
+              }}
+              className="h-8 w-44 pl-7 text-xs"
+            />
+            {searchOpen && searchQuery.trim() !== "" && (
+              <div className="card-elevated absolute right-0 top-full z-20 mt-1.5 w-60 overflow-hidden p-1">
+                {searchMatches.length === 0 ? (
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">No matches.</p>
+                ) : (
+                  searchMatches.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => selectSearchMatch(n.id)}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: NODE_COLOR[n.kind] }}
+                      />
+                      <span className="min-w-0 flex-1 truncate font-medium">{n.label}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {n.kind === "company" ? "Company" : n.kind === "director" ? "Director" : "Shareholder"}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <label className="sr-only" htmlFor="network-filter">
+            Relationship filter
+          </label>
+          <select
+            id="network-filter"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as RelationshipFilter)}
+            className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-medium outline-none transition-colors focus:border-brand/40 focus:ring-2 focus:ring-brand/[0.15]"
+          >
+            {(Object.keys(FILTER_LABELS) as RelationshipFilter[]).map((key) => (
+              <option key={key} value={key}>
+                {FILTER_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {isLoading ? (
