@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
+import type { ConfirmableSectionHandle } from "@/components/intake/CorporateInfoSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,16 +13,15 @@ import type { CtosTradeReference } from "@/types/screening";
 
 import { SubjectBadge } from "./SubjectBadge";
 
-export function TradeReferencesTable({
-  vendorId,
-  items,
-  showSubjectBadge = true,
-}: {
-  vendorId: string;
-  items: CtosTradeReference[];
-  /** Omit when items are already scoped to a single, known enquiry (e.g. inside the upload-review modal) */
-  showSubjectBadge?: boolean;
-}) {
+export const TradeReferencesTable = forwardRef<
+  ConfirmableSectionHandle,
+  {
+    vendorId: string;
+    items: CtosTradeReference[];
+    /** Omit when items are already scoped to a single, known enquiry (e.g. inside the upload-review modal) */
+    showSubjectBadge?: boolean;
+  }
+>(function TradeReferencesTable({ vendorId, items, showSubjectBadge = true }, ref) {
   const [edits, setEdits] = useState<Record<string, Partial<TradeReferenceInput>>>({});
   const updateTradeReference = useUpdateTradeReference(vendorId);
   const deleteTradeReference = useDeleteTradeReference(vendorId);
@@ -54,6 +54,8 @@ export function TradeReferencesTable({
         )
     );
   }
+
+  useImperativeHandle(ref, () => ({ confirmAll }));
 
   return (
     <section className="rounded-lg border border-border p-4">
@@ -163,4 +165,4 @@ export function TradeReferencesTable({
       )}
     </section>
   );
-}
+});

@@ -68,6 +68,12 @@ export function useExtractCtosEnquiry(vendorId: string | undefined) {
     mutationFn: (ctosEnquiryId: string) =>
       apiPost<CtosEnquiry>(`/api/ctos-enquiries/${ctosEnquiryId}/extract`),
     onSuccess: (_data, ctosEnquiryId) => invalidate(ctosEnquiryId),
+    // A failed extraction deletes the enquiry server-side (see
+    // ctosEnquiries.ts) rather than leaving an empty shell - invalidate here
+    // too, or the Screening page (which already shows it from the create
+    // step's invalidation) would keep rendering that now-deleted enquiry
+    // from its stale cache until some unrelated refetch happened to clear it.
+    onError: (_err, ctosEnquiryId) => invalidate(ctosEnquiryId),
   });
 }
 
@@ -211,6 +217,13 @@ export function useExtractNetrevealRecord(vendorId: string | undefined) {
     mutationFn: (recordId: string) =>
       apiPost<NetrevealRecord>(`/api/netreveal-records/${recordId}/extract`),
     onSuccess: () => invalidate(),
+    // A failed extraction deletes the record server-side (see
+    // netrevealRecords.ts) rather than leaving a blank card - invalidate
+    // here too, or the Screening page (which already shows it from the
+    // create step's invalidation) would keep rendering that now-deleted
+    // record from its stale cache until some unrelated refetch happened to
+    // clear it.
+    onError: () => invalidate(),
   });
 }
 

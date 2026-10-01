@@ -583,16 +583,30 @@ const MAX_QUERIES_PER_RUN = Number(process.env.MAX_QUERIES_PER_RUN ?? 120);
 // screening modules (CTOS/NetReveal) still take exactly one subject.
 const ADVERSE_MEDIA_SUBJECT_TYPES = [...SUBJECT_TYPES, "all"] as const;
 
-const runAdverseMediaSearchSchema = z.object({
-  subject_type: z.enum(ADVERSE_MEDIA_SUBJECT_TYPES),
+const subjectSelectionSchema = z.object({
+  subject_type: z.enum(SUBJECT_TYPES),
   related_director_id: z.string().uuid().nullable().optional(),
   related_shareholder_id: z.string().uuid().nullable().optional(),
-  extra_keywords: z.array(z.string().min(1)).optional(),
-  // Narrows which active library keywords are used (e.g. the reviewer
-  // unchecked some pre-selected defaults in the search panel). Omit to use
-  // every active keyword, which is also the fallback if this list is empty.
-  keyword_ids: z.array(z.string().uuid()).optional(),
 });
+
+const runAdverseMediaSearchSchema = z
+  .object({
+    // Legacy single-subject or "all" shape - still accepted, but the search
+    // panel now always sends `subjects` (the reviewer's checked subset,
+    // whether that's one subject, several, or every one of them).
+    subject_type: z.enum(ADVERSE_MEDIA_SUBJECT_TYPES).optional(),
+    related_director_id: z.string().uuid().nullable().optional(),
+    related_shareholder_id: z.string().uuid().nullable().optional(),
+    subjects: z.array(subjectSelectionSchema).min(1).optional(),
+    extra_keywords: z.array(z.string().min(1)).optional(),
+    // Narrows which active library keywords are used (e.g. the reviewer
+    // unchecked some pre-selected defaults in the search panel). Omit to use
+    // every active keyword, which is also the fallback if this list is empty.
+    keyword_ids: z.array(z.string().uuid()).optional(),
+  })
+  .refine((data) => data.subject_type !== undefined || (data.subjects?.length ?? 0) > 0, {
+    message: "subject_type or subjects is required",
+  });
 
 vendorsRouter.post(
   "/:id/adverse-media-searches",
@@ -622,8 +636,21 @@ vendorsRouter.post(
     // Which subjects this run covers. "all" fans out over the company plus
     // every director and shareholder captured in Module 1 - the related
     // parties a reviewer would otherwise have to search one at a time.
+    // An explicit `subjects` list is the reviewer's own checked subset
+    // (one, several, or - equivalently to "all" - every one of them).
     const targets: { subjectType: SubjectType; subject: ResolvedSubject }[] = [];
-    if (body.subject_type === "all") {
+    if (body.subjects && body.subjects.length > 0) {
+      for (const s of body.subjects) {
+        targets.push({
+          subjectType: s.subject_type,
+          subject: await resolveSubject(vendorId, {
+            subjectType: s.subject_type,
+            relatedDirectorId: s.related_director_id,
+            relatedShareholderId: s.related_shareholder_id,
+          }),
+        });
+      }
+    } else if (body.subject_type === "all") {
       const [directors, shareholders] = await Promise.all([
         prisma.ssmDirector.findMany({ where: { vendorId }, select: { id: true, name: true } }),
         prisma.ssmShareholder.findMany({ where: { vendorId }, select: { id: true, name: true } }),
@@ -649,6 +676,11 @@ vendorsRouter.post(
         });
       }
     } else {
+      // Guaranteed by the schema's refine (subject_type or subjects is
+      // required) - this check just lets TypeScript narrow out `undefined`.
+      if (!body.subject_type) {
+        throw new ValidationError("subject_type or subjects is required");
+      }
       targets.push({
         subjectType: body.subject_type,
         subject: await resolveSubject(vendorId, {
@@ -804,8 +836,11 @@ vendorsRouter.post(
       };
     }
 
-    // A single subject keeps its original response shape exactly.
-    if (body.subject_type !== "all") {
+    // A single subject (and only when it arrived via the legacy subject_type
+    // field, not an explicit one-item `subjects` list) keeps its original
+    // response shape exactly.
+    const isMultiSubjectRun = body.subject_type === "all" || Boolean(body.subjects?.length);
+    if (!isMultiSubjectRun) {
       const { subjectType, subject } = targets[0];
       const outcome = await runForSubject(subjectType, subject);
       if (outcome.error) {

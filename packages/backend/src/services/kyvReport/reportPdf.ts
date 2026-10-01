@@ -100,7 +100,7 @@ function buildHtml(report: ReportForPdf): string {
 }
 
 // Lazily launched, reused across requests - same "construct on first real
-// use, not at module load" convention as the Gemini/Groq clients, so a
+// use, not at module load" convention as the Gemini client, so a
 // missing/broken Chromium install only breaks the export endpoint, and app
 // startup/health checks never wait on a Chrome download.
 //

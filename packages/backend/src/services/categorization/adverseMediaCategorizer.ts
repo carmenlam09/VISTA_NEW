@@ -1,8 +1,7 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { getGeminiClient } from "../../lib/gemini";
-import { getGroqClient } from "../../lib/groq";
+import { generateContent } from "../../lib/gemini";
 
 // Fixed taxonomy from VISTA_module3_system_prompt.md Section 1.
 export const RISK_THEMES = [
@@ -45,8 +44,6 @@ const responseSchema = {
 };
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
-// gpt-oss supports Groq's strict json_schema structured output mode.
-const GROQ_MODEL = process.env.GROQ_CATEGORIZATION_MODEL ?? "openai/gpt-oss-20b";
 
 export interface ArticleToCategorize {
   subjectName: string;
@@ -67,52 +64,10 @@ const userPrompt = (article: ArticleToCategorize) =>
     `Snippet: ${article.snippet ?? "(no snippet available)"}`,
   ].join("\n");
 
-// Text-only classification (no PDF/document input needed), so this tries
-// Groq first - with strict json_schema structured output - and falls back
-// to Gemini if Groq is unavailable, errors, or returns something that
-// doesn't validate.
-async function categorizeWithGroq(article: ArticleToCategorize): Promise<CategorizationResult> {
-  const response = await getGroqClient().chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt(article) },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "article_categorization",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            risk_theme: { type: "string", enum: [...RISK_THEMES] },
-            ai_summary: { type: "string" },
-          },
-          required: ["risk_theme", "ai_summary"],
-          additionalProperties: false,
-        },
-      },
-    },
-  });
-
-  const text = response.choices[0]?.message?.content;
-  if (!text) {
-    throw new CategorizationValidationError("Groq returned an empty response");
-  }
-
-  const parsed = categorizationSchema.safeParse(JSON.parse(text));
-  if (!parsed.success) {
-    throw new CategorizationValidationError(
-      `Groq's response did not match the expected schema: ${parsed.error.message}`
-    );
-  }
-
-  return parsed.data;
-}
-
-async function categorizeWithGemini(article: ArticleToCategorize): Promise<CategorizationResult> {
-  const response = await getGeminiClient().models.generateContent({
+export async function categorizeArticle(
+  article: ArticleToCategorize
+): Promise<CategorizationResult> {
+  const response = await generateContent({
     model: GEMINI_MODEL,
     contents: [{ role: "user", parts: [{ text: userPrompt(article) }] }],
     config: {
@@ -142,14 +97,4 @@ async function categorizeWithGemini(article: ArticleToCategorize): Promise<Categ
   }
 
   return parsed.data;
-}
-
-export async function categorizeArticle(
-  article: ArticleToCategorize
-): Promise<CategorizationResult> {
-  try {
-    return await categorizeWithGroq(article);
-  } catch {
-    return await categorizeWithGemini(article);
-  }
 }

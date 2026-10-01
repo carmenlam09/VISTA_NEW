@@ -2,14 +2,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { apiPost, apiPut } from "@/lib/api";
 import type { AdverseMediaArticle, AdverseMediaSearchRun } from "@/types/adverseMedia";
-import type { AdverseMediaSubjectType } from "@/types/screening";
+import type { SubjectType } from "@/types/screening";
 
 export type DecidableDecision = "relevant" | "false_positive";
 
 export interface RunSearchInput {
-  subject_type: AdverseMediaSubjectType;
-  related_director_id?: string | null;
-  related_shareholder_id?: string | null;
+  // The reviewer's checked subset of subjects - one, several, or every one
+  // of them. Each entry runs as its own search.
+  subjects: Array<{
+    subject_type: SubjectType;
+    related_director_id?: string | null;
+    related_shareholder_id?: string | null;
+  }>;
   extra_keywords?: string[];
   keyword_ids?: string[];
 }

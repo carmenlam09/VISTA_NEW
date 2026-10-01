@@ -191,13 +191,19 @@ export function Sidebar() {
             </div>
           );
         })}
-      </div>
 
-      {!collapsed && (
-        <div className="shrink-0 pt-3">
-          <RiskGauge />
-        </div>
-      )}
+        {/* Scrolls together with the nav items above rather than being
+            pinned outside this scroll area - on a short viewport the whole
+            region now shares the available height instead of this
+            decorative card always reserving its full space and squeezing
+            the module list (which is what matters more) into its own
+            cramped scrollbar first. */}
+        {!collapsed && (
+          <div className="pt-3">
+            <RiskGauge />
+          </div>
+        )}
+      </div>
 
       <div className="shrink-0 space-y-1 border-t border-brand/25 px-2 py-3">
         <button

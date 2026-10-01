@@ -65,16 +65,16 @@ ctosEnquiriesRouter.post(
       const pdfBuffer = await fs.readFile(path.join(UPLOAD_DIR, document.filePath));
       result = await extractCtosData(pdfBuffer);
     } catch (err) {
-      await prisma.document.update({
-        where: { id: document.id },
-        data: {
-          uploadStatus: "failed",
-          rawExtractionJson:
-            err instanceof ExtractionValidationError
-              ? { error: err.message }
-              : { error: "Extraction failed" },
-        },
-      });
+      // No financial highlights/legal cases/trade references exist yet at
+      // this point - those only get created in the success transaction
+      // below - and this enquiry was only ever created moments ago by the
+      // same upload-and-extract request, never reviewed. Roll it back
+      // (enquiry, document, and the uploaded file) rather than leaving an
+      // empty enquiry shell behind.
+      await prisma.ctosEnquiry.delete({ where: { id: enquiry.id } });
+      await prisma.document.delete({ where: { id: document.id } });
+      await fs.unlink(path.join(UPLOAD_DIR, document.filePath)).catch(() => {});
+
       if (err instanceof ExtractionValidationError) {
         res.status(422).json({ error: err.message });
         return;

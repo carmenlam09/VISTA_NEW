@@ -1,10 +1,5 @@
-import { getGeminiClient } from "../../lib/gemini";
+import { embedContent } from "../../lib/gemini";
 
-// Groq has no embedding model at all (confirmed live against its own
-// /models endpoint), so embeddings always go through Gemini - no
-// Groq-first/Gemini-fallback dance here, unlike the text-generation
-// services elsewhere in the app.
-//
 // gemini-embedding-001's native output is 3072-dim, which exceeds
 // pgvector's hard 2000-dimension cap on indexable vector columns
 // (ivfflat/hnsw - see the pgvector README). 1536 is a supported
@@ -24,7 +19,7 @@ function normalize(values: number[]): number[] {
 // this matches Google's documented guidance and keeps stored vectors
 // consistent for any future non-cosine use.
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await getGeminiClient().models.embedContent({
+  const response = await embedContent({
     model: EMBEDDING_MODEL,
     contents: [text],
     config: { outputDimensionality: EMBEDDING_DIMENSION },

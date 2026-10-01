@@ -1,12 +1,9 @@
-import { getGeminiClient } from "../lib/gemini";
-import { getGroqClient } from "../lib/groq";
+import { generateContent } from "../lib/gemini";
 import { prisma } from "../lib/prisma";
 
 // Unlike the extraction services, this summarizes existing structured data
 // into a narrative - no Zod schema, just a sanity check that the model
 // actually returned something (per VISTA_module2_system_prompt.md Section 3).
-// Text-only (no PDF/document input needed), so this tries Groq first and
-// falls back to Gemini if Groq is unavailable or errors.
 export class SummaryGenerationError extends Error {
   constructor(message: string) {
     super(message);
@@ -14,7 +11,6 @@ export class SummaryGenerationError extends Error {
 }
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
-const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-120b";
 
 const SYSTEM_PROMPT = `You are a KYV (Know Your Vendor) risk analyst at a bank. You will be given a JSON profile of a vendor combining their corporate registration data (Module 1) and screening/due-diligence results (Module 2: CTOS credit reports and NetReveal watchlist searches).
 
@@ -66,31 +62,16 @@ export async function generateScreeningSummary(
 
   const userPrompt = `Vendor profile (JSON):\n${JSON.stringify(profile, null, 2)}`;
 
-  try {
-    const groqResponse = await getGroqClient().chat.completions.create({
-      model: GROQ_MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-    });
-    const summaryText = groqResponse.choices[0]?.message?.content?.trim();
-    if (!summaryText || summaryText.length < 20) {
-      throw new SummaryGenerationError("Groq returned an empty or too-short summary");
-    }
-    return { summaryText, model: GROQ_MODEL };
-  } catch (groqError) {
-    const response = await getGeminiClient().models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      config: { systemInstruction: SYSTEM_PROMPT },
-    });
+  const response = await generateContent({
+    model: GEMINI_MODEL,
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    config: { systemInstruction: SYSTEM_PROMPT },
+  });
 
-    const summaryText = response.text?.trim();
-    if (!summaryText || summaryText.length < 20) {
-      throw new SummaryGenerationError("Gemini returned an empty or too-short summary");
-    }
-
-    return { summaryText, model: GEMINI_MODEL };
+  const summaryText = response.text?.trim();
+  if (!summaryText || summaryText.length < 20) {
+    throw new SummaryGenerationError("Gemini returned an empty or too-short summary");
   }
+
+  return { summaryText, model: GEMINI_MODEL };
 }

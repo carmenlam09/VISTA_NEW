@@ -34,16 +34,17 @@ netrevealRecordsRouter.post(
       const pdfBuffer = await fs.readFile(path.join(UPLOAD_DIR, document.filePath));
       result = await extractNetrevealData(pdfBuffer);
     } catch (err) {
-      await prisma.document.update({
-        where: { id: document.id },
-        data: {
-          uploadStatus: "failed",
-          rawExtractionJson:
-            err instanceof ExtractionValidationError
-              ? { error: err.message }
-              : { error: "Extraction failed" },
-        },
-      });
+      // Every field on this record lives directly on it (unlike CTOS, where
+      // only child rows get populated on success) - a failed extraction
+      // leaves nothing worth keeping, and this record was only ever created
+      // moments ago by the same upload-and-extract request, never reviewed.
+      // Roll it back (record, document, and the uploaded file) rather than
+      // leaving a blank "AI-extracted" card sitting in the watchlist
+      // indistinguishable from real, just-empty, data.
+      await prisma.netrevealRecord.delete({ where: { id: record.id } });
+      await prisma.document.delete({ where: { id: document.id } });
+      await fs.unlink(path.join(UPLOAD_DIR, document.filePath)).catch(() => {});
+
       if (err instanceof ExtractionValidationError) {
         res.status(422).json({ error: err.message });
         return;

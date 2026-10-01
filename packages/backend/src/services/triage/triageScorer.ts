@@ -1,8 +1,7 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { getGeminiClient } from "../../lib/gemini";
-import { getGroqClient } from "../../lib/groq";
+import { generateContent } from "../../lib/gemini";
 import type { SubjectType } from "../subjects";
 
 export const SUGGESTED_DECISIONS = ["relevant", "false_positive", "needs_review"] as const;
@@ -56,8 +55,6 @@ const responseSchema = {
 };
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
-// gpt-oss supports Groq's strict json_schema structured output mode.
-const GROQ_MODEL = process.env.GROQ_TRIAGE_MODEL ?? "openai/gpt-oss-20b";
 
 function buildUserPrompt(input: TriageFindingInput): string {
   return [
@@ -76,48 +73,9 @@ function buildUserPrompt(input: TriageFindingInput): string {
   ].join("\n");
 }
 
-async function scoreWithGroq(prompt: string): Promise<TriageScore> {
-  const response = await getGroqClient().chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "risk_triage_score",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            confidence_score: { type: "number" },
-            ai_rationale: { type: "string" },
-            suggested_decision: { type: "string", enum: [...SUGGESTED_DECISIONS] },
-          },
-          required: ["confidence_score", "ai_rationale", "suggested_decision"],
-          additionalProperties: false,
-        },
-      },
-    },
-  });
-
-  const text = response.choices[0]?.message?.content;
-  if (!text) {
-    throw new TriageScoringError("Groq returned an empty response");
-  }
-
-  const parsed = triageScoreSchema.safeParse(JSON.parse(text));
-  if (!parsed.success) {
-    throw new TriageScoringError(
-      `Groq's response did not match the expected schema: ${parsed.error.message}`
-    );
-  }
-  return parsed.data;
-}
-
-async function scoreWithGemini(prompt: string): Promise<TriageScore> {
-  const response = await getGeminiClient().models.generateContent({
+export async function scoreTriageFinding(input: TriageFindingInput): Promise<TriageScore> {
+  const prompt = buildUserPrompt(input);
+  const response = await generateContent({
     model: GEMINI_MODEL,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
@@ -146,21 +104,4 @@ async function scoreWithGemini(prompt: string): Promise<TriageScore> {
     );
   }
   return parsed.data;
-}
-
-// Text-only reasoning over context already gathered from Postgres (no
-// PDF/document input needed), so this tries Groq first and falls back to
-// Gemini if Groq is unavailable, errors, or returns something that doesn't
-// validate - same pattern as adverseMediaCategorizer.ts.
-export async function scoreTriageFinding(input: TriageFindingInput): Promise<TriageScore> {
-  const prompt = buildUserPrompt(input);
-  try {
-    return await scoreWithGroq(prompt);
-  } catch (groqError) {
-    console.error(
-      "Groq triage scoring failed, falling back to Gemini:",
-      groqError instanceof Error ? groqError.message : groqError
-    );
-    return await scoreWithGemini(prompt);
-  }
 }

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
+import type { ConfirmableSectionHandle } from "@/components/intake/CorporateInfoSection";
 import { PdfPreviewPane } from "@/components/intake/PdfPreviewPane";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +42,16 @@ export function AddCtosEnquiryModal({
   // same query - see useInvalidateScreening).
   const [enquiryId, setEnquiryId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const financialHighlightsRef = useRef<ConfirmableSectionHandle>(null);
+  const legalCasesRef = useRef<ConfirmableSectionHandle>(null);
+  const tradeReferencesRef = useRef<ConfirmableSectionHandle>(null);
+
+  function handleConfirmAll() {
+    financialHighlightsRef.current?.confirmAll();
+    legalCasesRef.current?.confirmAll();
+    tradeReferencesRef.current?.confirmAll();
+  }
 
   const queryClient = useQueryClient();
   const createEnquiry = useCreateCtosEnquiry(vendorId);
@@ -163,19 +174,40 @@ export function AddCtosEnquiryModal({
             <div className="grid gap-4 lg:grid-cols-2">
               <PdfPreviewPane documentId={enquiry.documentId} />
               <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Review each section below, or confirm everything at once.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      (enquiry.subjectType !== "company" ||
+                        (enquiry.financialHighlights?.isVerified ?? false)) &&
+                      enquiry.legalCases.every((c) => c.isVerified) &&
+                      enquiry.tradeReferences.every((r) => r.isVerified)
+                    }
+                    onClick={handleConfirmAll}
+                  >
+                    Confirm &amp; Save All
+                  </Button>
+                </div>
                 {enquiry.subjectType === "company" && (
                   <FinancialHighlightsCard
+                    ref={financialHighlightsRef}
                     vendorId={vendorId}
                     ctosEnquiryId={enquiry.id}
                     financialHighlights={enquiry.financialHighlights}
                   />
                 )}
                 <LegalCasesTable
+                  ref={legalCasesRef}
                   vendorId={vendorId}
                   items={enquiry.legalCases}
                   showSubjectBadge={false}
                 />
                 <TradeReferencesTable
+                  ref={tradeReferencesRef}
                   vendorId={vendorId}
                   items={enquiry.tradeReferences}
                   showSubjectBadge={false}

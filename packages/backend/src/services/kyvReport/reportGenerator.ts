@@ -127,9 +127,8 @@ export async function generateKyvReport(vendorId: string) {
   const sections = activeTemplate.sections as unknown as TemplateSection[];
 
   // Bounded concurrency, not Promise.all - same rate-limit-avoidance pattern
-  // used for triage scoring. Throws on the first section that fails (after
-  // its own Groq->Gemini fallback already failed) rather than silently
-  // producing a report missing a section.
+  // used for triage scoring. Throws on the first section that fails rather
+  // than silently producing a report missing a section.
   const draftedSections = await mapWithConcurrency(
     sections,
     REPORT_SECTION_CONCURRENCY,
@@ -164,7 +163,10 @@ export async function generateKyvReport(vendorId: string) {
         })),
       },
     },
-    include: { sections: { orderBy: { sectionOrder: "asc" } } },
+    include: {
+      template: { select: { name: true, version: true } },
+      sections: { orderBy: { sectionOrder: "asc" } },
+    },
   });
 
   const warnings: string[] = [];

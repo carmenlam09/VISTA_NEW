@@ -117,14 +117,14 @@ export function KnowledgeRepositoryPage() {
             <span>From</span>
             <Input
               type="date"
-              className="h-8 w-auto"
+              className="h-8 w-auto dark:[color-scheme:dark]"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
             <span>To</span>
             <Input
               type="date"
-              className="h-8 w-auto"
+              className="h-8 w-auto dark:[color-scheme:dark]"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />

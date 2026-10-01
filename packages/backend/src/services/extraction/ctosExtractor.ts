@@ -1,13 +1,8 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { getGeminiClient } from "../../lib/gemini";
+import { generateContent } from "../../lib/gemini";
 
-// Stays on Gemini (not Groq): this sends the source PDF directly as
-// inlineData, and Groq's hosted models don't accept PDF/document input
-// (only images, and only through two vision models) - see
-// console.groq.com/docs/vision.
-//
 // Matches the JSON shapes in VISTA_module2_system_prompt.md Section 3.
 // financial_highlights is requested/extracted regardless of subject type, but
 // callers only persist it when the enquiry's subject_type is "company".
@@ -125,7 +120,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 export async function extractCtosData(pdfBuffer: Buffer): Promise<CtosExtractionResult> {
   const base64Pdf = pdfBuffer.toString("base64");
 
-  const response = await getGeminiClient().models.generateContent({
+  const response = await generateContent({
     model: GEMINI_MODEL,
     contents: [
       {

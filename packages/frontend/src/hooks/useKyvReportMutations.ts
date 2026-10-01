@@ -11,7 +11,11 @@ export function useGenerateKyvReport(vendorId: string | undefined) {
     mutationFn: () => apiPost<GenerateKyvReportResult>(`/api/vendors/${vendorId}/kyv-reports`),
     onSuccess: (report) => {
       queryClient.invalidateQueries({ queryKey: kyvReportHistoryQueryKey(vendorId) });
+      // Seed the cache so the detail view has something to show immediately,
+      // but still invalidate - the POST response's shape isn't guaranteed to
+      // match the GET /api/kyv-reports/:id response exactly.
       queryClient.setQueryData(kyvReportQueryKey(report.id), report);
+      queryClient.invalidateQueries({ queryKey: kyvReportQueryKey(report.id) });
     },
   });
 }

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
+import type { ConfirmableSectionHandle } from "@/components/intake/CorporateInfoSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,16 +23,15 @@ const RISK_DECISION_BADGE = {
 
 type Filter = "all" | LegalCaseType;
 
-export function LegalCasesTable({
-  vendorId,
-  items,
-  showSubjectBadge = true,
-}: {
-  vendorId: string;
-  items: CtosLegalCase[];
-  /** Omit when items are already scoped to a single, known enquiry (e.g. inside the upload-review modal) */
-  showSubjectBadge?: boolean;
-}) {
+export const LegalCasesTable = forwardRef<
+  ConfirmableSectionHandle,
+  {
+    vendorId: string;
+    items: CtosLegalCase[];
+    /** Omit when items are already scoped to a single, known enquiry (e.g. inside the upload-review modal) */
+    showSubjectBadge?: boolean;
+  }
+>(function LegalCasesTable({ vendorId, items, showSubjectBadge = true }, ref) {
   const [filter, setFilter] = useState<Filter>("all");
   const [edits, setEdits] = useState<Record<string, Partial<LegalCaseInput>>>({});
   const updateLegalCase = useUpdateLegalCase(vendorId);
@@ -66,6 +66,8 @@ export function LegalCasesTable({
         )
     );
   }
+
+  useImperativeHandle(ref, () => ({ confirmAll }));
 
   return (
     <section className="rounded-lg border border-border p-4">
@@ -183,4 +185,4 @@ export function LegalCasesTable({
       )}
     </section>
   );
-}
+});

@@ -119,6 +119,7 @@ export function NetrevealCard({
           <FieldLabel text="DOB / DOI" aiExtracted={!verified} />
           <Input
             type="date"
+            className="dark:[color-scheme:dark]"
             value={form.dob_doi ?? ""}
             onChange={(e) => set("dob_doi", e.target.value)}
           />

@@ -76,6 +76,7 @@ export const CorporateInfoSection = forwardRef<
           <FieldLabel text="Date of Name Change" aiExtracted={!verified} />
           <Input
             type="date"
+            className="dark:[color-scheme:dark]"
             value={form.date_of_name_change ?? ""}
             onChange={(e) => set("date_of_name_change", e.target.value)}
           />
@@ -84,6 +85,7 @@ export const CorporateInfoSection = forwardRef<
           <FieldLabel text="Date of Incorporation" aiExtracted={!verified} />
           <Input
             type="date"
+            className="dark:[color-scheme:dark]"
             value={form.date_of_incorporation ?? ""}
             onChange={(e) => set("date_of_incorporation", e.target.value)}
           />

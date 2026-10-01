@@ -106,9 +106,7 @@ export function IntakePage() {
         <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-sm font-medium">Extracting {ssmDoc.fileName}...</p>
-          <p className="text-xs text-muted-foreground">
-            Gemini is reading the SSM report — this usually takes a few seconds.
-          </p>
+          <p className="text-xs text-muted-foreground">Gemini is reading the SSM report.</p>
         </div>
       )}
 

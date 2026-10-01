@@ -59,7 +59,7 @@ function toOrganicResult(entry: unknown): SerpOrganicResult | null {
 
 // One query -> Google organic search results via SerpApi (serpapi.com).
 // `SERP_API_KEY` is read lazily so a missing key only breaks a search call,
-// not the whole server - same convention as lib/gemini.ts / lib/groq.ts.
+// not the whole server - same convention as lib/gemini.ts.
 export async function searchGoogle(
   query: string,
   options?: { num?: number; gl?: string; hl?: string }

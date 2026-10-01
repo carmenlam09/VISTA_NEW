@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
+import type { ConfirmableSectionHandle } from "@/components/intake/CorporateInfoSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,15 +41,14 @@ const OTHER_STATS: { key: keyof FinancialHighlightsInput; label: string }[] = [
   { key: "current_liabilities", label: "Current Liabilities" },
 ];
 
-export function FinancialHighlightsCard({
-  vendorId,
-  ctosEnquiryId,
-  financialHighlights,
-}: {
-  vendorId: string;
-  ctosEnquiryId: string;
-  financialHighlights: CtosFinancialHighlights | null;
-}) {
+export const FinancialHighlightsCard = forwardRef<
+  ConfirmableSectionHandle,
+  {
+    vendorId: string;
+    ctosEnquiryId: string;
+    financialHighlights: CtosFinancialHighlights | null;
+  }
+>(function FinancialHighlightsCard({ vendorId, ctosEnquiryId, financialHighlights }, ref) {
   const [form, setForm] = useState<FinancialHighlightsInput>(() => toForm(financialHighlights));
   const [savedForm, setSavedForm] = useState<FinancialHighlightsInput>(() =>
     toForm(financialHighlights)
@@ -71,6 +71,8 @@ export function FinancialHighlightsCard({
       { onSuccess: () => setSavedForm(form) }
     );
   }
+
+  useImperativeHandle(ref, () => ({ confirmAll: save }));
 
   return (
     <section className="rounded-lg border border-border p-4">
@@ -131,4 +133,4 @@ export function FinancialHighlightsCard({
       </div>
     </section>
   );
-}
+});

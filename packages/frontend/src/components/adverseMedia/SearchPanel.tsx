@@ -1,18 +1,15 @@
 import { useState } from "react";
 
-import { SubjectPicker } from "@/components/screening/SubjectPicker";
+import { SubjectCheckboxList } from "@/components/adverseMedia/SubjectCheckboxList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useRunAdverseMediaSearch } from "@/hooks/useAdverseMediaMutations";
 import { useKeywordLibrary } from "@/hooks/useKeywordLibrary";
 import { useSubjects } from "@/hooks/useSubjects";
-import { ALL_SUBJECTS_ID, type Subject } from "@/types/screening";
 
 export function SearchPanel({ vendorId }: { vendorId: string }) {
-  const [subject, setSubject] = useState<Subject | null>(null);
-  // Tracked separately from `subject` so the picker keeps its single-subject
-  // contract - "all" is a mode, not a subject record.
-  const [searchAll, setSearchAll] = useState(false);
+  // One, several, or every subject - the reviewer checks whichever they want.
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<Set<string>>(new Set());
   const { data: subjects } = useSubjects(vendorId);
   const { data: activeKeywords } = useKeywordLibrary({ is_active: true });
   // Nothing pre-checked - the reviewer opts in to whichever keywords they want.
@@ -34,30 +31,26 @@ export function SearchPanel({ vendorId }: { vendorId: string }) {
     .map((s) => s.trim())
     .filter(Boolean);
   const keywordCount = selectedIds.size + extraKeywords.length;
-  const hasSubject = searchAll || Boolean(subject);
+  const hasSubject = selectedSubjectIds.size > 0;
   const canSearch = hasSubject && keywordCount > 0;
 
-  // Each subject-keyword pair is one paid SERP call, so an "all" run is worth
-  // showing the reviewer before they trigger it.
-  const subjectCount = searchAll ? (subjects?.length ?? 0) : 1;
+  // Each subject-keyword pair is one paid SERP call, so a multi-subject run
+  // is worth showing the reviewer before they trigger it.
+  const subjectCount = selectedSubjectIds.size;
   const plannedQueries = subjectCount * keywordCount;
 
   function handleRunSearch() {
-    if (!canSearch) return;
+    if (!canSearch || !subjects) return;
 
-    if (searchAll) {
-      runSearch.mutate({
-        subject_type: "all",
-        keyword_ids: Array.from(selectedIds),
-        extra_keywords: extraKeywords.length > 0 ? extraKeywords : undefined,
-      });
-      return;
-    }
-    if (!subject) return;
+    const selectedSubjects = subjects.filter((s) => selectedSubjectIds.has(s.id));
+    if (selectedSubjects.length === 0) return;
+
     runSearch.mutate({
-      subject_type: subject.type,
-      related_director_id: subject.type === "director" ? subject.id : undefined,
-      related_shareholder_id: subject.type === "shareholder" ? subject.id : undefined,
+      subjects: selectedSubjects.map((s) => ({
+        subject_type: s.type,
+        related_director_id: s.type === "director" ? s.id : undefined,
+        related_shareholder_id: s.type === "shareholder" ? s.id : undefined,
+      })),
       keyword_ids: Array.from(selectedIds),
       extra_keywords: extraKeywords.length > 0 ? extraKeywords : undefined,
     });
@@ -72,23 +65,14 @@ export function SearchPanel({ vendorId }: { vendorId: string }) {
       <div className="space-y-3">
         <div>
           <div className="mb-1 text-xs font-medium text-muted-foreground">Subject</div>
-          <SubjectPicker
+          <SubjectCheckboxList
             vendorId={vendorId}
-            includeAll
-            value={searchAll ? ALL_SUBJECTS_ID : subject?.id ?? ""}
-            onChange={(next) => {
-              setSearchAll(false);
-              setSubject(next);
-            }}
-            onSelectAll={() => {
-              setSearchAll(true);
-              setSubject(null);
-            }}
+            selectedIds={selectedSubjectIds}
+            onChange={setSelectedSubjectIds}
           />
-          {searchAll && (
+          {subjectCount > 1 && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Searches the company and every director and shareholder captured in Intake &amp;
-              Extraction, one search per subject.
+              Searches each selected subject separately, one search per subject.
             </p>
           )}
         </div>
@@ -154,14 +138,14 @@ export function SearchPanel({ vendorId }: { vendorId: string }) {
               Select at least one keyword, or enter an extra keyword above.
             </p>
           )}
-          {canSearch && searchAll && (
+          {canSearch && subjectCount > 1 && (
             <p className="text-xs text-muted-foreground">
               {plannedQueries} queries across {subjectCount} subjects
             </p>
           )}
           <Button disabled={!canSearch || runSearch.isPending} onClick={handleRunSearch}>
             {runSearch.isPending
-              ? searchAll
+              ? subjectCount > 1
                 ? `Searching ${subjectCount} subjects...`
                 : "Searching..."
               : "Run Search"}

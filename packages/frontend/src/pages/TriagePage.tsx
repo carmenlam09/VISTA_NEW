@@ -64,7 +64,7 @@ export function TriagePage() {
             {runTriage.isPending ? "Running triage..." : "Run Triage"}
           </Button>
           <p className="mt-1 text-xs text-muted-foreground">
-            Scores every not-yet-decided finding - can take a minute or two.
+            Scores every not-yet-decided finding.
           </p>
         </div>
       </div>
